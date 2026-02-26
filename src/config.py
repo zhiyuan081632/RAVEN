@@ -5,9 +5,9 @@ import os
 ###############################################################
 
 #TODO: replace with your own project root and data folder paths
-PROJECT_ROOT = "/path/to/your/project/root"
-DATA_FOLDER_PATH = "/data/VoxCeleb2"
-MUSAN_FOLDER_PATH = "/data/MUSAN"
+PROJECT_ROOT = "/mnt/e/project/prjANS/src/AVSE/RAVEN"
+DATA_FOLDER_PATH = "/mnt/e/data/VoxCeleb2"
+MUSAN_FOLDER_PATH = "/mnt/e/data/MUSAN"
 
 ##############################################################
 ################## OVERALL CONFIGURATION #####################

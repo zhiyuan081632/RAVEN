@@ -4,14 +4,22 @@ import torch
 import numpy as np
 import pandas as pd
 import sys
-import src.config as config
-sys.path.append(config.AVHUBERT_PATH)
+
+# Add parent directory to path to import config
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import config
+
+# Don't add AVHUBERT_PATH to sys.path here to avoid duplicate imports
+# sys.path.append(config.AVHUBERT_PATH)
 import torch
 import torch.nn.functional as F
-import utils as avhubert_utils
+import importlib.util
+spec = importlib.util.spec_from_file_location("avhubert_utils", os.path.join(config.AVHUBERT_PATH, "utils.py"))
+avhubert_utils = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(avhubert_utils)
 from argparse import Namespace
 import fairseq
-from fairseq import checkpoint_utils, options, tasks, utils
+from fairseq import checkpoint_utils, options, tasks, utils as fairseq_utils
 sys.path.append(config.VSRIW_PATH)
 from tqdm import tqdm
 from torch.utils.data import Dataset, DataLoader, get_worker_info
@@ -42,7 +50,7 @@ class VideoDataset(Dataset):
         super().__init__()
         self.df = pd.read_csv(data_split_path)
         self.data_path = data_path
-        self.file_list = pd.read_csv("./data/split.csv", header=None)[0].str.replace("/aac/", "/mp4/").str.replace(".m4a", ".mp4")
+        self.file_list = pd.read_csv("./split.csv", header=None)[0].str.replace("/aac/", "/mp4/").str.replace(".m4a", ".mp4")
         self.video_processor = VideoProcess()
         self.video_transform = VideoTransform(speed_rate=1)
         self.face_track = face_track
@@ -130,6 +138,14 @@ def random_5s_clip(video, frame_rate=25):
         pad_array = np.zeros((pad_frames, H, W, C), dtype=video.dtype) 
         return np.concatenate((video, pad_array), axis=0)
 
+def custom_collate(batch):
+    """Custom collate function to handle None values in batch"""
+    batch = [item for item in batch if item[0] is not None]
+    if len(batch) == 0:
+        return None, None
+    return batch[0]  # Return single item since batch_size=1
+
+
 class AVHuBERTBatchedPreprocessing:
     def __init__(
             self,
@@ -142,9 +158,13 @@ class AVHuBERTBatchedPreprocessing:
         ) -> None:
         super().__init__()
         self.ds = VideoDataset(data_split_path, data_path, face_track=face_track)
-        self.dataloader = DataLoader(self.ds, batch_size=batch_size, num_workers=num_workers, drop_last=False, worker_init_fn=video_dataset_worker_init)
+        self.dataloader = DataLoader(self.ds, batch_size=batch_size, num_workers=num_workers, 
+                                     drop_last=False, worker_init_fn=video_dataset_worker_init,
+                                     collate_fn=custom_collate)
         self.device = device
-        utils.import_user_module(Namespace(user_dir=config.AVHUBERT_PATH))
+        # Extract split name from data_split_path (e.g., "split.csv" -> "split")
+        self.split = os.path.splitext(os.path.basename(data_split_path))[0]
+        fairseq_utils.import_user_module(Namespace(user_dir=config.AVHUBERT_PATH))
         models, saved_cfg, task = checkpoint_utils.load_model_ensemble_and_task([os.path.join(config.AVHUBERT_PATH, "conf/finetune/base_lrs3_433h.pt" )])
         self.model = models[0].encoder.w2v_model.feature_extractor_video.to(self.device)
         self.model.eval()
@@ -153,26 +173,28 @@ class AVHuBERTBatchedPreprocessing:
         failed_text_path = os.path.join(config.DATA_FOLDER_PATH, f"failed_avhubert_frontE_feat_{self.split}.txt")
         with open(failed_text_path, 'w') as failed_txt:
             for video_tensor, fp in tqdm(self.dataloader):
-                if video_tensor is not None:
-                    output_ft_path = fp.replace("/mp4/", "/AVHuBERT_feats/")
-                    output_ft_path = output_ft_path.replace(".mp4", ".npy")
-                    if os.path.exists(output_ft_path):
-                        continue
-                    video_tensor = video_tensor.unsqueeze(0).unsqueeze(0)
-                    with torch.no_grad():
-                        enc_feats: torch.Tensor = self.model(video_tensor.to(self.device))
-                        enc_feats = enc_feats.squeeze(0).T
+                # Skip if both are None (video loading failed)
+                if video_tensor is None or fp is None:
+                    if fp is not None:
+                        print(f"Video {fp} preprocessing failed.")
+                        failed_txt.write(fp + '\n')
+                    continue
                     
-                    features = enc_feats.detach().cpu().numpy()
-                    assert features.shape == (125, 768), f"Video {fp} has shape {features.shape}"
-                    
-                    if not os.path.exists(os.path.dirname(output_ft_path)):
-                        os.makedirs(os.path.dirname(output_ft_path))
-                    np.save(output_ft_path, features)
-
-                else:
-                    print(f"Video {fp} preprocessing failed.")
-                    failed_txt.write(fp + '\n')
+                output_ft_path = fp.replace("/mp4/", "/AVHuBERT_feats/")
+                output_ft_path = output_ft_path.replace(".mp4", ".npy")
+                if os.path.exists(output_ft_path):
+                    continue
+                video_tensor = video_tensor.unsqueeze(0).unsqueeze(0)
+                with torch.no_grad():
+                    enc_feats: torch.Tensor = self.model(video_tensor.to(self.device))
+                    enc_feats = enc_feats.squeeze(0).T
+                
+                features = enc_feats.detach().cpu().numpy()
+                assert features.shape == (125, 768), f"Video {fp} has shape {features.shape}"
+                
+                if not os.path.exists(os.path.dirname(output_ft_path)):
+                    os.makedirs(os.path.dirname(output_ft_path))
+                np.save(output_ft_path, features)
               
                     
                 
@@ -188,12 +210,13 @@ class AVHuBERTBatchedPreprocessing:
                 
 
 def main():
-    data_split = "./data/split.csv"
+    data_split = "./split.csv"
     process = AVHuBERTBatchedPreprocessing(
         data_split,
         DATA_FOLDER_PATH,
         face_track=True,
-        num_workers=64
+        num_workers=8,  # Further reduced from 16 to 8 to avoid OOM
+        batch_size=1   # Process one video at a time
     )
     process.extract_features()
 

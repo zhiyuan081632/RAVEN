@@ -3,10 +3,10 @@ import os
 import warnings
 import multiprocessing
 import sys
-from src.models.system import System
-from src.models.fusion import Fusion
-from src.data.datamodule import VoxCeleb2DataModule
-from src.losses.complex_mse import PSA_MSE
+from models.system import System
+from models.fusion import Fusion
+from data.datamodule import VoxCeleb2DataModule
+from losses.complex_mse import PSA_MSE
 
 from pytorch_lightning import seed_everything, Trainer
 from pytorch_lightning.callbacks import ModelCheckpoint

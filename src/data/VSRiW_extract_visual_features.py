@@ -4,7 +4,11 @@ import torch
 import numpy as np
 import pandas as pd
 import sys
-import src.config as config
+
+# Add parent directory to path to import config
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import config
+
 sys.path.append(config.VSRIW_PATH)
 from pipelines.model import AVSR
 from tqdm import tqdm

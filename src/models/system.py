@@ -3,9 +3,9 @@ import torch
 import torch.nn as nn
 import numpy as np
 import random
-from src.models.fusion import Fusion
-from src.utils.spec_audio_conversion import convert_to_audio_from_complex_spectrogram_after_compression_torch, convert_to_complex_spectrogram_with_compression_torch
-from src.utils.denoiser import denoise_speech
+from models.fusion import Fusion
+from utils.spec_audio_conversion import convert_to_audio_from_complex_spectrogram_after_compression_torch, convert_to_complex_spectrogram_with_compression_torch
+from utils.denoiser import denoise_speech
 from pytorch_lightning.utilities import grad_norm
 
 

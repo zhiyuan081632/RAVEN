@@ -6,7 +6,11 @@ import torch.nn.functional as F
 import numpy as np
 import pandas as pd
 import sys
-import src.config as config
+
+# Add parent directory to path to import config
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import config
+
 sys.path.append(config.TALKNET_PATH)
 from talkNet import talkNet
 from tqdm import tqdm

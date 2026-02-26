@@ -1,6 +1,6 @@
 import pandas as pd
 import numpy as np
-from src.utils.utils import crop_pad_audio
+from utils.utils import crop_pad_audio
 import librosa
 import hashlib
 import os

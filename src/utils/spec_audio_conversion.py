@@ -1,6 +1,6 @@
 import librosa
 import numpy as np
-from src.utils.utils import crop_pad_audio
+from utils.utils import crop_pad_audio
 import torch
 
 

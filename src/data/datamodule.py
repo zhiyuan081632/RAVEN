@@ -1,6 +1,6 @@
 import pytorch_lightning as pl
 from torch.utils import data
-from src.data.dataset import VoxCeleb2
+from data.dataset import VoxCeleb2
 import torch
 import pandas as pd
 

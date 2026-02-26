@@ -1,12 +1,20 @@
 import random
+import sys
+import os
 
 import soundfile as sf
 
 import hashlib
 
-from src.utils.utils import crop_pad_audio, apply_gain
+# Add parent directory to path to enable both direct script execution and module import
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+try:
+    from .utils import crop_pad_audio, apply_gain
+except ImportError:
+    from utils.utils import crop_pad_audio, apply_gain
+    
 from pathlib import Path
-import os
 import torch
 import pandas as pd
 import numpy as np
@@ -14,11 +22,12 @@ from tqdm import tqdm
 from pydub import AudioSegment
 import librosa
 from concurrent.futures import ProcessPoolExecutor
-import src.config as config
+import config
 
 # Change SPLIT to "train" or "val" or "test" to process the corresponding dataset
 SPLIT = "train"
-INPUT_DIR = os.path.join("dev/wav")
+# Input directory - set to either "dev/wav" or "dev/aac"
+INPUT_DIR = "dev/aac"  # Change this to "dev/wav" if you have wav files
 OUTPUT_DIR = os.path.join(config.DATA_FOLDER_PATH, "dev/mixed_wav")
 
 os.makedirs(OUTPUT_DIR, exist_ok=True)
@@ -99,10 +108,11 @@ def mix(target_speaker, interfering_speaker_fp, other_interference_fp, snr_lower
     return mixed_audio
 
 
-def process_file(m4a_path):
+def process_file(file_info):
     """ Process a single file in parallel, skipping already processed files. """
-    relative_path = m4a_path.relative_to(INPUT_DIR)
-    output_path = Path(OUTPUT_DIR) / relative_path
+    m4a_path, input_dir = file_info
+    relative_path = m4a_path.relative_to(input_dir)
+    output_path = Path(OUTPUT_DIR) / relative_path.parent / (relative_path.stem + ".wav")
     os.makedirs(output_path.parent, exist_ok=True)
 
     if output_path.exists():
@@ -121,14 +131,28 @@ def process_file(m4a_path):
 
 def main():
     """ Run multiprocessing with multiple workers, skipping existing files. """
-    num_workers = min(os.cpu_count(), 16)  
-    # if you do not have wav files saved, you could comment out the next line
-    voxceleb2_wav_fps = voxceleb2_fps.str.replace("/aac/", "/wav/").str.replace(".m4a", ".wav")
-    wav_files = [Path(fp) for fp in voxceleb2_wav_fps.tolist()]
-
+    num_workers = min(os.cpu_count(), 16)
+    
+    # Detect format from INPUT_DIR
+    if "wav" in INPUT_DIR:
+        input_format = "wav"
+        # Convert aac paths to wav paths
+        audio_fps = voxceleb2_fps.str.replace("/aac/", "/wav/").str.replace(".m4a", ".wav")
+        print(f"Using WAV format from {INPUT_DIR}")
+    else:  # aac
+        input_format = "aac"
+        # Use original aac paths
+        audio_fps = voxceleb2_fps
+        print(f"Using AAC/M4A format from {INPUT_DIR}")
+    
+    audio_files = [Path(fp) for fp in audio_fps.tolist()]
+    file_info_list = [(fp, INPUT_DIR) for fp in audio_files]
+    
+    print(f"Total files to process: {len(audio_files)}")
+    print(f"Output directory: {OUTPUT_DIR}")
 
     with ProcessPoolExecutor(max_workers=num_workers) as executor:
-        list(tqdm(executor.map(process_file, wav_files), total=len(wav_files)))
+        list(tqdm(executor.map(process_file, file_info_list), total=len(file_info_list)))
 
 
 if __name__ == "__main__":

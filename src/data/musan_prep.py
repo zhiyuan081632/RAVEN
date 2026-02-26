@@ -1,7 +1,11 @@
 import os
 import pandas as pd
 from sklearn.model_selection import train_test_split
-from src.config import config
+import sys
+
+# Add parent directory to path to import config
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import config
 
 parent_folder = config.MUSAN_FOLDER_PATH
 project_folder = config.PROJECT_FOLDER_PATH

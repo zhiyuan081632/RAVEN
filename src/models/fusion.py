@@ -1,8 +1,8 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from src.models.audio_stream import Audio_Encoder
-from src.models.video_stream import Video_Encoder
+from models.audio_stream import Audio_Encoder
+from models.video_stream import Video_Encoder
 
 
 

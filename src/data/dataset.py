@@ -5,9 +5,9 @@ from torch.utils import data
 import pandas as pd
 import librosa
 import hashlib
-from src.utils.utils import crop_pad_audio
-from src.utils.augment_visual import augment_visual
-import src.config as config
+from utils.utils import crop_pad_audio
+from utils.augment_visual import augment_visual
+import config as config
 
 
 SPLIT_FILE_PATH = "./data/split.parquet"
