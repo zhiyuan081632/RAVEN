@@ -37,7 +37,7 @@ class VideoDataset(Dataset):
         self.df = pd.read_csv(data_split_path)
         self.data_path = data_path
         self.split= split
-        self.file_list = pd.read_csv("./data/split.csv", header=None)[0].str.replace("/aac/", "/mp4/").str.replace(".m4a", ".mp4").tolist()
+        self.file_list = pd.read_csv("./split.csv", header=None)[0].str.replace("/aac/", "/mp4/").str.replace(".m4a", ".mp4").tolist()
 
 
     def __len__(self):
@@ -67,7 +67,7 @@ class TalkNetBatchedPreprocessing:
             batch_size: int = None,
             num_workers: int = 1,
 
-            device = "cuda:1"
+            device = "cuda"
         ) -> None:
         super().__init__()
         self.split = split
@@ -153,13 +153,23 @@ def random_5s_clip(video, frame_rate=25):
 
 def main():
     model_path = os.path.join(config.TALKNET_PATH, "pretrain_TalkSet.model")
-    data_split = "./data/split.csv"
+    
+    # Download pretrained model if not exists
+    if not os.path.isfile(model_path):
+        print(f"Model not found at {model_path}, downloading...")
+        Link = "1AbN9fCf9IexMxEKXLQY2KYBlb-IhSEea"
+        cmd = f"gdown --id {Link} -O {model_path}"
+        import subprocess
+        subprocess.call(cmd, shell=True, stdout=None)
+        print(f"Model downloaded to {model_path}")
+    
+    data_split = "./split.csv"
     process = TalkNetBatchedPreprocessing(
         model_path,
         data_split,
         DATA_FOLDER_PATH,
         split = "test",
-        num_workers=64
+        num_workers=16  # Reduced from 64 to avoid issues
     )
     process.extract_features()
 

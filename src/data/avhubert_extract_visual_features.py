@@ -122,6 +122,10 @@ class VideoDataset(Dataset):
 
 
 def video_dataset_worker_init(worker_id):
+
+
+
+    
     info = get_worker_info()
     info.dataset._initialize_detector()
     

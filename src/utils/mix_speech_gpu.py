@@ -79,31 +79,26 @@ def get_interfering_fps(target_speaker_fp, musan_fps, voxceleb2_fps, augment_typ
 
 
 def mix(target_speaker, interfering_speaker_fp, other_interference_fp, snr_lower, snr_upper, orig_sr=16000, crop_length=5):
-    """ Mix target speaker with interfering speaker and noise on GPU. """
-    with torch.cuda.stream(cuda_stream):  
-        target_speaker = target_speaker.to(device, non_blocking=True)  
+    """ Mix target speaker with interfering speaker and noise. """
+    # Process on CPU to avoid GPU memory issues in multiprocessing
+    interfering_speaker = crop_pad_audio(interfering_speaker_fp, orig_sr, crop_length)
+    interfering_speaker = librosa.util.normalize(interfering_speaker)
+    
+    if other_interference_fp is not None:
+        other_interference = crop_pad_audio(other_interference_fp, orig_sr, crop_length)
+        other_interference = librosa.util.normalize(other_interference)
+        mixed_interference = other_interference + interfering_speaker
+    else:
+        mixed_interference = interfering_speaker
 
-        interfering_speaker = crop_pad_audio(interfering_speaker_fp, orig_sr, crop_length)
-        interfering_speaker = librosa.util.normalize(interfering_speaker)
-        interfering_speaker = torch.tensor(interfering_speaker).to(device=device, non_blocking=True)
-        
-        if other_interference_fp is not None:
-            other_interference = crop_pad_audio(other_interference_fp, orig_sr, crop_length)
-            other_interference = librosa.util.normalize(other_interference)
-            other_interference = torch.tensor(other_interference).to(device=device, non_blocking=True)
-            mixed_interference = other_interference + interfering_speaker
-        else:
-            mixed_interference = interfering_speaker
+    dB_snr = np.random.uniform(snr_lower, snr_upper)
+    snr_factor = 10**(dB_snr / 10)
+    
+    target_speaker_power = np.mean(target_speaker**2)
+    mixed_interference_power = np.mean(mixed_interference**2)
 
-
-        dB_snr = torch.tensor(np.random.uniform(snr_lower, snr_upper), device=device)
-        snr_factor = 10**(dB_snr / 10)
-        
-        target_speaker_power = torch.mean(target_speaker**2)
-        mixed_interference_power = torch.mean(mixed_interference**2)
-
-        scale_factor = torch.sqrt(target_speaker_power / (snr_factor * mixed_interference_power))
-        mixed_audio = target_speaker + mixed_interference * scale_factor
+    scale_factor = np.sqrt(target_speaker_power / (snr_factor * mixed_interference_power))
+    mixed_audio = target_speaker + mixed_interference * scale_factor
 
     return mixed_audio
 
@@ -113,18 +108,16 @@ def process_file(file_info):
     m4a_path, input_dir = file_info
     relative_path = m4a_path.relative_to(input_dir)
     output_path = Path(OUTPUT_DIR) / relative_path.parent / (relative_path.stem + ".wav")
-    os.makedirs(output_path.parent, exist_ok=True)
-
+    
     if output_path.exists():
         return
     
+    os.makedirs(output_path.parent, exist_ok=True)
+    
     target_speaker_fp = os.path.join(config.DATA_FOLDER_PATH, m4a_path)
     target_speaker = crop_pad_audio(target_speaker_fp, 16000, 5)
-    target_speaker = torch.tensor(target_speaker).to(device=device, non_blocking=True)
-
 
     mixed_audio = augment_speech(target_speaker, m4a_path, voxceleb2_fps, musan_fps, config.TRAINING_LOWER_SNR, config.TRAINING_UPPER_SNR, SPLIT)
-    mixed_audio = mixed_audio.cpu().numpy()
     sf.write(output_path, mixed_audio, 16000, format="wav")
 
 

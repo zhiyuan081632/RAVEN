@@ -11,8 +11,11 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import config
 
-sys.path.append(config.LOCONET_PATH)
+# Add LoCoNet path for imports
+sys.path.insert(0, config.LOCONET_PATH)
+sys.path.insert(0, os.path.join(config.LOCONET_PATH, 'dlhammer'))
 from loconet import Loconet, loconet
+from dlhammer import bootstrap
 from tqdm import tqdm
 from torch.utils.data import Dataset, DataLoader, get_worker_info
 import torchvision
@@ -41,7 +44,7 @@ class VideoDataset(Dataset):
         self.df = pd.read_csv(data_split_path)
         self.data_path = data_path
         self.split= split
-        self.file_list = pd.read_csv("./data/split.csv", header=None)[0].str.replace("/aac/", "/mp4/").str.replace(".m4a", ".mp4").tolist()
+        self.file_list = pd.read_csv("./split.csv", header=None)[0].str.replace("/aac/", "/mp4/").str.replace(".m4a", ".mp4").tolist()
 
 
     def __len__(self):
@@ -77,7 +80,14 @@ class TalkNetBatchedPreprocessing:
         self.split = split
         self.ds = VideoDataset(data_split_path, data_path, split = self.split)
         self.dataloader = DataLoader(self.ds, batch_size=batch_size, num_workers=num_workers, drop_last=False, shuffle=True)
-        self.model = loconet(None).to(device)
+        # Initialize cfg using bootstrap with config file
+        config_file = os.path.join(config.LOCONET_PATH, 'configs/multi.yaml')
+        # Set sys.argv to pass config file to bootstrap
+        original_argv = sys.argv.copy()
+        sys.argv = ['script_name', '--cfg', config_file]
+        cfg = bootstrap(print_cfg=False)
+        sys.argv = original_argv  # Restore original argv
+        self.model = loconet(cfg).to(device)
         self.model.loadParameters(model_path)
         self.device = device
 
@@ -156,13 +166,35 @@ def random_5s_clip(video, frame_rate=25):
 
 def main():
     model_path = os.path.join(config.LOCONET_PATH, "loconet_ava_best.model")
+    
+    # Download pretrained model if not exists
+    if not os.path.isfile(model_path):
+        print(f"Model not found at {model_path}")
+        print("Please download the model manually:")
+        print("1. Visit: https://drive.google.com/file/d/1EX-V464jCD6S-wg68yGuAa-UcsMrw8mK/view")
+        print(f"2. Save it to: {model_path}")
+        print("\nOr use this command (if you have network access to Google Drive):")
+        print(f"   gdown 1EX-V464jCD6S-wg68yGuAa-UcsMrw8mK -O {model_path}")
+        
+        # Try to download
+        print("\nAttempting to download...")
+        Link = "1EX-V464jCD6S-wg68yGuAa-UcsMrw8mK"
+        cmd = f"gdown {Link} -O {model_path}"
+        import subprocess
+        result = subprocess.call(cmd, shell=True)
+        
+        if result != 0 or not os.path.isfile(model_path):
+            print(f"\nDownload failed! Please download manually.")
+            return
+        print(f"Model downloaded successfully to {model_path}")
+    
     data_split = os.path.join(config.PROJECT_ROOT, "src/data/split.csv")
     process = TalkNetBatchedPreprocessing(
         model_path,
         data_split,
         DATA_FOLDER_PATH,
         split = "test",
-        num_workers=64
+        num_workers=16  # Reduced from 64
     )
     process.extract_features()
 

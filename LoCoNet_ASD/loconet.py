@@ -8,7 +8,7 @@ from loss_multi import lossAV, lossA, lossV
 from model.loconet_encoder import locoencoder
 
 import torch.distributed as dist
-from xxlib.utils.distributed import all_gather, all_reduce
+from utils.distributed import all_gather, all_reduce
 
 
 class Loconet(nn.Module):

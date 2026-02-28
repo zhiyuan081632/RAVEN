@@ -178,3 +178,4 @@ cython_debug/
 
 # Checkpoints
 *.pt
+*.model
