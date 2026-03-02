@@ -186,7 +186,7 @@ def main():
         data_path=DATA_FOLDER_PATH,
         split="val",
         face_track=True,
-        num_workers=64
+        num_workers=8 # os.cpu_count() = 16 or 64
     )
     process.extract_features()
 

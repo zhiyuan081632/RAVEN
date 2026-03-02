@@ -48,6 +48,10 @@ Prior to extracting the pretrained embeddings of the dataset, clone the correspo
 
 <sup>2</sup> Go to the official model checkpoint [page](https://facebookresearch.github.io/av_hubert/) and sign the license agreement first. 
 
+### Run pipeline with small data
+```
+python data/small_data.py 
+```
 
 ### Simulate the Noisy Input Mixture
 

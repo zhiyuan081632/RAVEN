@@ -37,7 +37,7 @@ class VideoDataset(Dataset):
         self.df = pd.read_csv(data_split_path)
         self.data_path = data_path
         self.split= split
-        self.file_list = pd.read_csv("./split.csv", header=None)[0].str.replace("/aac/", "/mp4/").str.replace(".m4a", ".mp4").tolist()
+        self.file_list = pd.read_csv("./data/split.csv", header=None)[0].str.replace("/aac/", "/mp4/").str.replace(".m4a", ".mp4").tolist()
 
 
     def __len__(self):
@@ -163,13 +163,13 @@ def main():
         subprocess.call(cmd, shell=True, stdout=None)
         print(f"Model downloaded to {model_path}")
     
-    data_split = "./split.csv"
+    data_split = "./data/split.csv"
     process = TalkNetBatchedPreprocessing(
         model_path,
         data_split,
         DATA_FOLDER_PATH,
         split = "test",
-        num_workers=16  # Reduced from 64 to avoid issues
+        num_workers=2 # os.cpu_count() = 16 or 64
     )
     process.extract_features()
 

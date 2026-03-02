@@ -14,7 +14,8 @@ def denoise_speech(noisy_audio, orig_sr=16000, crop_length=5):
     
     # noisy_audio = torch.tensor(noisy_audio).unsqueeze(0)
     # initialize denoiser model
-    model, df_state, _ = init_df(log_level='ERROR')
+    # model, df_state, _ = init_df(log_level='ERROR')
+    model, df_state, _ = init_df(model_base_dir='../DeepFilterNet3', log_level='ERROR')
     # print(f"Checking model's device: {model.device}")
     enhanced_audio = enhance(model, df_state, noisy_audio.cpu())
     enhanced_audio = enhanced_audio.to(noisy_audio.device)

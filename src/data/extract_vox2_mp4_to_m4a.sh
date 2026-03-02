@@ -49,7 +49,7 @@ fi
 mkdir -p "$OUTPUT_DIR"
 
 # Run Python script
-python preprocess_vox2_audio.py \
+python data/preprocess_vox2_audio.py \
     --input_dir "$INPUT_DIR" \
     --output_dir "$OUTPUT_DIR" \
     --sample_rate $SAMPLE_RATE \

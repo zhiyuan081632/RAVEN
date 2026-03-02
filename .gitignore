@@ -176,6 +176,8 @@ cython_debug/
 # VSCode
 .vscode
 
-# Checkpoints
+# Model checkpoints
 *.pt
 *.model
+*.pth
+*.ckpt*
