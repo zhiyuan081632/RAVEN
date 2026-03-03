@@ -3,6 +3,8 @@ import torch
 import torch.nn as nn
 import numpy as np
 import random
+import os
+import soundfile as sf
 from models.fusion import Fusion
 from utils.spec_audio_conversion import convert_to_audio_from_complex_spectrogram_after_compression_torch, convert_to_complex_spectrogram_with_compression_torch
 from utils.denoiser import denoise_speech
@@ -99,9 +101,16 @@ class System(pl.LightningModule):
         self.test_dict["test_estoi"].append(estoi)
         self.test_dict["test_sisdr"].append(sisdr)
         self.test_dict["test_sisdr_gain"].append(sisdr_gain)
-        
-        
-        
+
+        # 保存增强后的音频
+        audio_fps = batch['audio_fp']
+        audio_fps = [audio_fps] if isinstance(audio_fps, str) else audio_fps
+        for i, fp in enumerate(audio_fps):
+            enhanced_fp = fp.replace("/aac/", "/enhanced_wav/").replace(".m4a", ".wav")
+            os.makedirs(os.path.dirname(enhanced_fp), exist_ok=True)
+            audio_np = clean_audio_pred[i].detach().cpu().numpy()
+            sf.write(enhanced_fp, audio_np, 16000)
+
     def on_test_epoch_end(self):
         avg_loss = sum(self.test_dict["test_loss"]) / len(self.test_dict["test_loss"])
         avg_sisdr = sum(self.test_dict["test_sisdr"]) / len(self.test_dict["test_sisdr"])
