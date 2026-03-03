@@ -10,7 +10,7 @@ import torch.nn as nn
 import os
 import multiprocessing
 import warnings
-import src.config as config
+import config
 
 
 def fxn():

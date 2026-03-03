@@ -1,3 +1,7 @@
+import sys
+import os
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 import pandas as pd
 import numpy as np
 from utils.utils import crop_pad_audio
@@ -6,6 +10,7 @@ import hashlib
 import os
 import soundfile as sf
 from tqdm import tqdm
+import config
 
 SAVE_TEST_FP = False
 
@@ -27,7 +32,7 @@ def generate_noise_condition(target_fp, noise_df, snr, orig_sr=16000, crop_lengt
     target_audio = librosa.util.normalize(target_audio)
     seed = int(hashlib.md5(target_fp.encode()).hexdigest(), 16) % (10 ** 8)
     noise_fp = noise_df.sample(1, random_state=seed)["filepath"].values[0]
-    noise_fp = os.path.join("/data/MUSAN", noise_fp)
+    noise_fp = os.path.join(config.MUSAN_FOLDER_PATH, noise_fp)
     noise_audio = crop_pad_audio(noise_fp, orig_sr, crop_length)
     noise_audio = librosa.util.normalize(noise_audio)
     
@@ -71,19 +76,23 @@ def generate_three_interfering_speakers_condition(target_fp, subset_test_df, snr
 def main(condition, snr):
     musan_fps = pd.read_csv("./data/musan_split.csv")
     main_df = pd.read_csv("./data/split.csv")
-    subset_test_df = main_df[main_df["split"] == "test"]
+    subset_test_df = main_df[main_df["split"] == "test"].copy()
+    subset_test_df["audio_fp"] = subset_test_df["audio_fp"].apply(
+        lambda fp: os.path.join(config.DATA_FOLDER_PATH, fp)
+    )
     target_test_df = random_select_fps(main_df)
     musan_noise_test_df = musan_fps[(musan_fps["split"] == "test") & (musan_fps["type"] == "noise")]
     
     for i, target_fp in tqdm(enumerate(target_test_df)):
+        abs_target_fp = os.path.join(config.DATA_FOLDER_PATH, target_fp)
         if condition == "noise_only":
-            mixed_audio = generate_noise_condition(target_fp, musan_noise_test_df, snr)
+            mixed_audio = generate_noise_condition(abs_target_fp, musan_noise_test_df, snr)
         elif condition == "one_interfering_speaker":
-            mixed_audio = generate_one_interfering_speaker_condition(target_fp, subset_test_df, snr)
+            mixed_audio = generate_one_interfering_speaker_condition(abs_target_fp, subset_test_df, snr)
         elif condition == "three_interfering_speakers":
-            mixed_audio = generate_three_interfering_speakers_condition(target_fp, subset_test_df, snr)
+            mixed_audio = generate_three_interfering_speakers_condition(abs_target_fp, subset_test_df, snr)
         
-        mixed_audio_fp = target_fp.replace("/aac/", f"/mixed_wav/{condition}/{snr}/").replace(".m4a", ".wav")
+        mixed_audio_fp = abs_target_fp.replace("/aac/", f"/mixed_wav/{condition}/{snr}/").replace(".m4a", ".wav")
         # check if directory exists
         os.makedirs(os.path.dirname(mixed_audio_fp), exist_ok=True)
         

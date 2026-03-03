@@ -50,7 +50,7 @@ class VideoDataset(Dataset):
         super().__init__()
         self.df = pd.read_csv(data_split_path)
         self.data_path = data_path
-        self.file_list = pd.read_csv("./data/split.csv", header=None)[0].str.replace("/aac/", "/mp4/").str.replace(".m4a", ".mp4")
+        self.file_list = pd.read_csv("./data/split.csv")["audio_fp"].str.replace("/aac/", "/mp4/").str.replace(".m4a", ".mp4")
         self.video_processor = VideoProcess()
         self.video_transform = VideoTransform(speed_rate=1)
         self.face_track = face_track

@@ -29,10 +29,10 @@ df_small = pd.concat([df_train, df_val, df_test, df_others], ignore_index=True)
 # 覆盖写回 split.parquet
 df_small.to_parquet(small_data_path)
 
-# 同步生成 split.csv，供视频特征提取脚本使用
-# 这里只保留 train/val/test 三个 split 的 audio_fp
-split_for_csv = df_small[df_small["split"].isin(["train", "val", "test"])]["audio_fp"]
-split_for_csv.to_csv("data/split_small.csv", index=False, header=False)
+# 同步生成 split_small.csv，供视频特征提取脚本使用
+# 保留三列（audio_fp, video_fp, split），带标题行，与原 split.csv 格式一致
+split_for_csv = df_small[df_small["split"].isin(["train", "val", "test"])]
+split_for_csv.to_csv("data/split_small.csv", index=False, header=True)
 
 print("Extracting small data split from full data complete!")
 print("Train rows:", len(df_small[df_small["split"] == "train"]))
