@@ -37,7 +37,15 @@ def test(visual_encoder, ckpt_path, test_condition, test_snr, embedding_size, ba
         'estoi': ShortTimeObjectiveIntelligibility(16000, True)
     }
 
-    model = System(fusion_network, loss, metrics)
+    test_meta = {
+        "visual_encoder": visual_encoder,
+        "ckpt_path": ckpt_path,
+        "test_condition": test_condition,
+        "test_snr": test_snr,
+        "log_path": "test_results.log",
+    }
+
+    model = System(fusion_network, loss, metrics, test_meta=test_meta)
     trainer = Trainer()
     trainer.test(model, dataloaders=test_loader, ckpt_path=ckpt_path)
 

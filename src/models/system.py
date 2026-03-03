@@ -5,6 +5,7 @@ import numpy as np
 import random
 import os
 import soundfile as sf
+from datetime import datetime
 from models.fusion import Fusion
 from utils.spec_audio_conversion import convert_to_audio_from_complex_spectrogram_after_compression_torch, convert_to_complex_spectrogram_with_compression_torch
 from utils.denoiser import denoise_speech
@@ -14,7 +15,7 @@ from pytorch_lightning.utilities import grad_norm
 
 
 class System(pl.LightningModule):
-    def __init__(self, model, loss, metrics):
+    def __init__(self, model, loss, metrics, test_meta=None):
         super().__init__()
         self.model = model
         self.loss = loss
@@ -22,6 +23,7 @@ class System(pl.LightningModule):
         self.base_seed = 42
         self.error_files = []
         self.error_log_path = 'error_files.txt'
+        self.test_meta = test_meta or {}  # 测试元信息，用于写 log
         self.test_dict = {
             'test_loss': [],
             'test_pesq': [],
@@ -123,7 +125,20 @@ class System(pl.LightningModule):
 
         print(f"AVG Test Loss: {avg_loss}, Test SISDR: {avg_sisdr}, Test SISDR Gain: {avg_sisdr_gain}, Test SNR: {avg_snr}, Test SNR Gain: {avg_snr_gain}, Test PESQ: {avg_pesq}, Test estoi: {avg_estoi}")
 
-        
+        # 将结果写入 log 文件
+        log_path = self.test_meta.get("log_path", "test_results.log")
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        with open(log_path, "a") as f:
+            f.write(f"\n[{timestamp}]\n")
+            for k, v in self.test_meta.items():
+                if k != "log_path":
+                    f.write(f"  {k}: {v}\n")
+            f.write(f"  AVG Test Loss: {avg_loss}\n")
+            f.write(f"  Test SISDR: {avg_sisdr}, SISDR Gain: {avg_sisdr_gain}\n")
+            f.write(f"  Test SNR: {avg_snr}, SNR Gain: {avg_snr_gain}\n")
+            f.write(f"  Test PESQ: {avg_pesq}\n")
+            f.write(f"  Test estoi: {avg_estoi}\n")
+
         return avg_loss, avg_pesq, avg_sisdr, avg_sisdr_gain, avg_snr, avg_snr_gain, avg_estoi
     
     def configure_optimizers(self):
