@@ -3,6 +3,7 @@ import os
 import warnings
 import multiprocessing
 import sys
+from datetime import datetime
 from models.system import System
 from models.fusion import Fusion
 from data.datamodule import VoxCeleb2DataModule
@@ -121,7 +122,11 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
     args.version_name = f"{args.visual_encoder}_5layer"
-    args.checkpoint_dir = os.path.join(config.PROJECT_ROOT, f"src/checkpoints/{args.version_name}")
+    
+    # 用起始时间命名 checkpoint 目录
+    start_time = datetime.now().strftime("%Y%m%d%H%M%S")
+    args.checkpoint_dir = os.path.join(config.PROJECT_ROOT, f"src/checkpoints/ckpt_{start_time}/{args.version_name}")
+    
     if args.embedding_size is None:
         args.embedding_size = config.embedding_size_dict[args.visual_encoder]
 

@@ -1,10 +1,13 @@
+'''
+从data/split.csv中抽取前1000条训练数据
+从data/VoxCeleb2_val_1000_fps.txt中抽取1000条验证数据
+从data/VoxCeleb2_test_1000_fps.txt中抽取1000条测试数据
+'''
+
 import pandas as pd
 
-full_data_path = "data/split_full.parquet"
-small_data_path = "data/split_small.parquet"
-
-# 读原始 split
-df = pd.read_parquet(full_data_path)
+# 读原始 split（三列：audio_fp, video_fp, split）
+df = pd.read_csv("data/split_full.csv") # 读取CSV文件
 
 # 1) 只保留前 1000 条 train 数据
 train_mask = df["split"] == "train"
@@ -27,10 +30,10 @@ df_others = df[~(train_mask | val_mask | test_mask)]
 df_small = pd.concat([df_train, df_val, df_test, df_others], ignore_index=True)
 
 # 覆盖写回 split.parquet
-df_small.to_parquet(small_data_path)
+df_small.to_parquet("data/split_small.parquet")
 
 # 同步生成 split_small.csv，供视频特征提取脚本使用
-# 保留三列（audio_fp, video_fp, split），带标题行，与原 split.csv 格式一致
+# 保留三列（audio_fp, video_fp, split），带标题行
 split_for_csv = df_small[df_small["split"].isin(["train", "val", "test"])]
 split_for_csv.to_csv("data/split_small.csv", index=False, header=True)
 
