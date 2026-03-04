@@ -99,16 +99,6 @@ def main(condition, snr):
         sf.write(mixed_audio_fp, mixed_audio, 16000)
         
 
-        
-            
-        
-    
-    
-        
-
-
-
-
 def mix_per_snr(target_speaker, all_interference, dB_snr):
     """ Mix target speaker with interfering speaker and noise on GPU. """
 

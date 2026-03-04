@@ -78,39 +78,55 @@ class TalkNetBatchedPreprocessing:
         self.device = device
 
     def extract_features(self):
+        failed_text_path = os.path.join(config.DATA_FOLDER_PATH, f"failed_TalkNet_frontE_feat_{self.split}.txt")
+        success_count = 0
+        skip_count = 0
+        failure_count = 0
+        total = len(self.ds)
         
-        
-        failed_text_path = os.path.join(config.DATA_FOLDER_PATH, f"failed_Loconet_frontE_feat_{self.split}.txt")
         with open(failed_text_path, 'w') as failed_txt:
-            i = 0
             for video_tensor, fp in tqdm(self.dataloader):
-                if video_tensor is not None:
-                    video_tensor = video_tensor.unsqueeze(0)
-                    B,T,H,W = video_tensor.shape
-                    video_tensor = video_tensor.to(self.device)
-                    video_tensor = video_tensor.view(B*T, 1, 1, W, H)
-                    video_tensor = (video_tensor / 255 - 0.4161) / 0.1688
-                    
-                    video_embed = self.model.model.visualFrontend(video_tensor)
-                    video_embed = video_embed.view(B, T, -1)
-                    video_embed = video_embed.squeeze(0)
+                try:
+                    if video_tensor is not None:
+                        output_path = fp.replace("/mp4/", "/TalkNet_feats/")
+                        output_ft_path = output_path.replace(".mp4", ".npy")
+                        # 跳过已存在的npy文件
+                        if os.path.exists(output_ft_path):
+                            skip_count += 1
+                            continue
+                        video_tensor = video_tensor.unsqueeze(0)
+                        B,T,H,W = video_tensor.shape
+                        video_tensor = video_tensor.to(self.device)
+                        video_tensor = video_tensor.view(B*T, 1, 1, W, H)
+                        video_tensor = (video_tensor / 255 - 0.4161) / 0.1688
+                        
+                        video_embed = self.model.model.visualFrontend(video_tensor)
+                        video_embed = video_embed.view(B, T, -1)
+                        video_embed = video_embed.squeeze(0)
 
-                    output_path = fp.replace("/mp4/", "/TalkNet_feats/")
-                    output_ft_path = output_path.replace(".mp4", ".npy")
-                    
-                    if not os.path.exists(os.path.dirname(output_ft_path)):
-                        os.makedirs(os.path.dirname(output_ft_path))
+                        if not os.path.exists(os.path.dirname(output_ft_path)):
+                            os.makedirs(os.path.dirname(output_ft_path))
 
-                    video_embed = video_embed.detach().cpu().numpy()
-                    
-                    assert video_embed.shape == (125, 512), f"Video {fp} has shape {video_embed.shape}"
-                    
-                    np.save(output_ft_path, video_embed)
-                    print(f"NUMPY FILE SAVED TO {output_ft_path}")
-
-                else:
-                    print(f"Video {fp} preprocessing failed.")
-                    failed_txt.write(fp)
+                        video_embed = video_embed.detach().cpu().numpy()
+                        
+                        assert video_embed.shape == (125, 512), f"Video {fp} has shape {video_embed.shape}"
+                        
+                        np.save(output_ft_path, video_embed)
+                        success_count += 1
+                    else:
+                        print(f"Video {fp} preprocessing failed.")
+                        failed_txt.write(fp + '\n')
+                        failure_count += 1
+                except Exception as e:
+                    print(f"Error processing {fp}: {e}")
+                    failed_txt.write(fp + f" # {str(e)}\n")
+                    failure_count += 1
+        
+        print(f"\n=== TalkNet 特征提取统计 ===")
+        print(f"总文件数: {total}")
+        print(f"新生成: {success_count}")
+        print(f"已跳过: {skip_count}")
+        print(f"失败: {failure_count}")
     
     def test_zero(self):
         

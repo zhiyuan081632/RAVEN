@@ -175,30 +175,51 @@ class AVHuBERTBatchedPreprocessing:
 
     def extract_features(self):
         failed_text_path = os.path.join(config.DATA_FOLDER_PATH, f"failed_avhubert_frontE_feat_{self.split}.txt")
+        success_count = 0
+        skip_count = 0
+        failure_count = 0
+        total = len(self.ds)
+        
         with open(failed_text_path, 'w') as failed_txt:
             for video_tensor, fp in tqdm(self.dataloader):
-                # Skip if both are None (video loading failed)
-                if video_tensor is None or fp is None:
-                    if fp is not None:
-                        print(f"Video {fp} preprocessing failed.")
-                        failed_txt.write(fp + '\n')
-                    continue
+                try:
+                    # 跳过加载失败的视频
+                    if video_tensor is None or fp is None:
+                        if fp is not None:
+                            print(f"Video {fp} preprocessing failed.")
+                            failed_txt.write(fp + '\n')
+                            failure_count += 1
+                        continue
                     
-                output_ft_path = fp.replace("/mp4/", "/AVHuBERT_feats/")
-                output_ft_path = output_ft_path.replace(".mp4", ".npy")
-                if os.path.exists(output_ft_path):
-                    continue
-                video_tensor = video_tensor.unsqueeze(0).unsqueeze(0)
-                with torch.no_grad():
-                    enc_feats: torch.Tensor = self.model(video_tensor.to(self.device))
-                    enc_feats = enc_feats.squeeze(0).T
-                
-                features = enc_feats.detach().cpu().numpy()
-                assert features.shape == (125, 768), f"Video {fp} has shape {features.shape}"
-                
-                if not os.path.exists(os.path.dirname(output_ft_path)):
-                    os.makedirs(os.path.dirname(output_ft_path))
-                np.save(output_ft_path, features)
+                    output_ft_path = fp.replace("/mp4/", "/AVHuBERT_feats/")
+                    output_ft_path = output_ft_path.replace(".mp4", ".npy")
+                    # 跳过已存在的npy文件
+                    if os.path.exists(output_ft_path):
+                        skip_count += 1
+                        continue
+                    video_tensor = video_tensor.unsqueeze(0).unsqueeze(0)
+                    with torch.no_grad():
+                        enc_feats: torch.Tensor = self.model(video_tensor.to(self.device))
+                        enc_feats = enc_feats.squeeze(0).T
+                    
+                    features = enc_feats.detach().cpu().numpy()
+                    assert features.shape == (125, 768), f"Video {fp} has shape {features.shape}"
+                    
+                    if not os.path.exists(os.path.dirname(output_ft_path)):
+                        os.makedirs(os.path.dirname(output_ft_path))
+                    np.save(output_ft_path, features)
+                    success_count += 1
+                except Exception as e:
+                    print(f"Error processing {fp}: {e}")
+                    if fp is not None:
+                        failed_txt.write(fp + f" # {str(e)}\n")
+                    failure_count += 1
+        
+        print(f"\n=== AVHuBERT 特征提取统计 ===")
+        print(f"总文件数: {total}")
+        print(f"新生成: {success_count}")
+        print(f"已跳过: {skip_count}")
+        print(f"失败: {failure_count}")
               
                     
                 
