@@ -83,11 +83,16 @@ class VoxCeleb2(data.Dataset):
             
         else:
             fe_fp = audio_fp.replace("/aac/", self.embedding_path_dict[self.visual_encoder]).replace(".m4a", ".npy")
-            face_embed = np.load(fe_fp, mmap_mode="r")
-            # crop and pad face embeddings to 5 seconds
-            face_embed = self._crop_pad_face_embeddings(face_embed)
-            face_embed = torch.tensor(face_embed)
-            
+            try:
+                face_embed = np.load(fe_fp, mmap_mode="r")
+                # crop and pad face embeddings to 5 seconds
+                face_embed = self._crop_pad_face_embeddings(face_embed)
+                face_embed = torch.tensor(face_embed)
+            except (FileNotFoundError, OSError, ValueError) as e:
+                print(f"Warning: Failed to load embedding {fe_fp}, using zeros. Error: {e}")
+                # 使用零填充作为后备
+                face_embed = torch.zeros((125, self.embedding_size))
+                
             if self.split != "test":
                 face_embed = augment_visual(face_embed, self.visual_encoder)[0]
 
@@ -99,43 +104,67 @@ class VoxCeleb2(data.Dataset):
             "audio_fp": audio_fp,
             "interfering_speaker_fp": if_speaker_fp
         }
-    
+
     def _concatenate_embeddings(self, audio_fp, combined_features):
-        
         fe1, fe2 = combined_features.split("_")[0], combined_features.split("_")[1]
         fe_fp1 = audio_fp.replace("/aac/", self.embedding_path_dict[fe1]).replace(".m4a", ".npy")
         fe_fp2 = audio_fp.replace("/aac/", self.embedding_path_dict[fe2]).replace(".m4a", ".npy")
-        face_embed1 = np.load(fe_fp1, mmap_mode="r")
-        face_embed2 = np.load(fe_fp2, mmap_mode="r")
+
+        # 计算每个编码器应有的维度（假设对称分配）
+        half_size = self.embedding_size // 2
         
-        face_embed1, face_embed2 = self._crop_pad_face_embeddings(face_embed1), self._crop_pad_face_embeddings(face_embed2)
-        
-        face_embed1, face_embed2 = torch.tensor(face_embed1), torch.tensor(face_embed2)
-        
+        # 分别加载每个编码器的 embedding
+        try:
+            embed1 = np.load(fe_fp1, mmap_mode="r")
+            embed1 = self._crop_pad_face_embeddings(embed1)
+        except (FileNotFoundError, OSError, ValueError) as e:
+            print(f"Warning: Failed to load {fe_fp1}, using zeros. Error: {e}")
+            # 使用零填充，维度为总维度的一半
+            embed1 = np.zeros((125, half_size), dtype=np.float32)
+
+        try:
+            embed2 = np.load(fe_fp2, mmap_mode="r")
+            embed2 = self._crop_pad_face_embeddings(embed2)
+        except (FileNotFoundError, OSError, ValueError) as e:
+            print(f"Warning: Failed to load {fe_fp2}, using zeros. Error: {e}")
+            # 使用零填充，维度为总维度的一半
+            embed2 = np.zeros((125, half_size), dtype=np.float32)
+
+        face_embed1, face_embed2 = torch.tensor(embed1), torch.tensor(embed2)
+
         if self.split != "test":
             face_embed1 = augment_visual(face_embed1, fe1)[0]
             face_embed2 = augment_visual(face_embed2, fe2)[0]
 
-        
         return torch.cat((face_embed1, face_embed2), dim=1)
     
     def _add_embeddings(self, audio_fp, combined_features):
-        
         fe1, fe2 = combined_features.split("_")[0], combined_features.split("_")[1]
         fe_fp1 = audio_fp.replace("/aac/", self.embedding_path_dict[fe1]).replace(".m4a", ".npy")
         fe_fp2 = audio_fp.replace("/aac/", self.embedding_path_dict[fe2]).replace(".m4a", ".npy")
-        face_embed1 = np.load(fe_fp1, mmap_mode="r")
-        face_embed2 = np.load(fe_fp2, mmap_mode="r")
+
+        # 计算每个编码器应有的维度
+        half_size = self.embedding_size // 2
         
-        face_embed1, face_embed2 = self._crop_pad_face_embeddings(face_embed1), self._crop_pad_face_embeddings(face_embed2)
-        
-        face_embed1, face_embed2 = torch.tensor(face_embed1), torch.tensor(face_embed2)
+        # 分别加载每个编码器的 embedding
+        try:
+            embed1 = np.load(fe_fp1, mmap_mode="r")
+            embed1 = self._crop_pad_face_embeddings(embed1)
+        except (FileNotFoundError, OSError, ValueError):
+            embed1 = np.zeros((125, half_size), dtype=np.float32)
+
+        try:
+            embed2 = np.load(fe_fp2, mmap_mode="r")
+            embed2 = self._crop_pad_face_embeddings(embed2)
+        except (FileNotFoundError, OSError, ValueError):
+            embed2 = np.zeros((125, half_size), dtype=np.float32)
+
+        face_embed1, face_embed2 = torch.tensor(embed1), torch.tensor(embed2)
         
         if self.split != "test":
             face_embed1 = augment_visual(face_embed1, fe1)[0]
             face_embed2 = augment_visual(face_embed2, fe2)[0]
 
-        
         return face_embed1 + face_embed2
     
     

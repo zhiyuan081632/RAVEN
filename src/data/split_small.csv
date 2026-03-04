@@ -1,4 +1,5 @@
 audio_fp,video_fp,split
+dev/aac/id05750/iOKl9LefSvc/00300.m4a,dev/mp4/id05750/iOKl9LefSvc/00300.mp4,train
 dev/aac/id04219/bGLFntUuA58/00408.m4a,dev/mp4/id04219/bGLFntUuA58/00408.mp4,train
 dev/aac/id04219/W1MRIB2NKjA/00394.m4a,dev/mp4/id04219/W1MRIB2NKjA/00394.mp4,train
 dev/aac/id04219/W1MRIB2NKjA/00389.m4a,dev/mp4/id04219/W1MRIB2NKjA/00389.mp4,train
@@ -998,7 +999,6 @@ dev/aac/id00290/R5IcIb--8xI/00017.m4a,dev/mp4/id00290/R5IcIb--8xI/00017.mp4,trai
 dev/aac/id00290/R5IcIb--8xI/00021.m4a,dev/mp4/id00290/R5IcIb--8xI/00021.mp4,train
 dev/aac/id00290/R5IcIb--8xI/00022.m4a,dev/mp4/id00290/R5IcIb--8xI/00022.mp4,train
 dev/aac/id00290/R5IcIb--8xI/00027.m4a,dev/mp4/id00290/R5IcIb--8xI/00027.mp4,train
-dev/aac/id00290/R5IcIb--8xI/00020.m4a,dev/mp4/id00290/R5IcIb--8xI/00020.mp4,train
 dev/aac/id05534/Gt5lN3KjRMY/00004.m4a,dev/mp4/id05534/Gt5lN3KjRMY/00004.mp4,val
 dev/aac/id08612/uPGub6MlOH8/00046.m4a,dev/mp4/id08612/uPGub6MlOH8/00046.mp4,val
 dev/aac/id09160/kcJ20QjAJZg/00062.m4a,dev/mp4/id09160/kcJ20QjAJZg/00062.mp4,val

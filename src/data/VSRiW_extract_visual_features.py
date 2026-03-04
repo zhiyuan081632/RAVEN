@@ -141,24 +141,43 @@ class AVSRBatchedPreprocessing:
 
     def extract_features(self):
         failed_text_path = os.path.join(config.DATA_FOLDER_PATH, f"failed_VSRiW_frontE_feat_{self.split}.txt")
+        success_count = 0
+        skip_count = 0
+        failure_count = 0
+        total = len(self.ds)
+        
         with open(failed_text_path, 'w') as failed_txt:
             for video_tensor, fp in tqdm(self.dataloader):
-                if video_tensor is not None:
-                    output_ft_path = fp.replace("/mp4/", "/vsriw/")
-                    output_ft_path = output_ft_path.replace(".mp4", ".npy")
-                    if os.path.exists(output_ft_path):
-                        continue
-                    if not os.path.exists(os.path.dirname(output_ft_path)):
-                        os.makedirs(os.path.dirname(output_ft_path))
-                    with torch.no_grad():
-                        enc_feats: torch.Tensor = self.model.model.encode(video_tensor.to(self.device), True)
-                    
-                    features = enc_feats.detach().cpu().numpy()
-                    np.save(output_ft_path, features)
-
-                else:
-                    print(f"Video {fp} preprocessing failed.")
-                    failed_txt.write(fp)
+                try:
+                    if video_tensor is not None:
+                        output_ft_path = fp.replace("/mp4/", "/vsriw/")
+                        output_ft_path = output_ft_path.replace(".mp4", ".npy")
+                        # 跳过已存在的npy文件
+                        if os.path.exists(output_ft_path):
+                            skip_count += 1
+                            continue
+                        if not os.path.exists(os.path.dirname(output_ft_path)):
+                            os.makedirs(os.path.dirname(output_ft_path))
+                        with torch.no_grad():
+                            enc_feats: torch.Tensor = self.model.model.encode(video_tensor.to(self.device), True)
+                        
+                        features = enc_feats.detach().cpu().numpy()
+                        np.save(output_ft_path, features)
+                        success_count += 1
+                    else:
+                        print(f"Video {fp} preprocessing failed.")
+                        failed_txt.write(fp + '\n')
+                        failure_count += 1
+                except Exception as e:
+                    print(f"Error processing {fp}: {e}")
+                    failed_txt.write(fp + f" # {str(e)}\n")
+                    failure_count += 1
+        
+        print(f"\n=== 特征提取统计 ===")
+        print(f"总文件数: {total}")
+        print(f"新生成: {success_count}")
+        print(f"已跳过: {skip_count}")
+        print(f"失败: {failure_count}")
     
     def test_zero(self):
         

@@ -1,6 +1,6 @@
 
 # Convert full data from mp4 to ma4c/wav
-./data/extract_vox2_mp4_to_m4a.sh
+# ./data/extract_vox2_mp4_to_m4a.sh
 
 # 配置开关: "small" 或 "full"
 MODE="small"

@@ -25,7 +25,7 @@ from concurrent.futures import ProcessPoolExecutor
 import config
 
 # Change SPLIT to "train" or "val" or "test" to process the corresponding dataset
-SPLIT = "train"
+SPLIT = "val"
 # Input directory - set to either "dev/wav" or "dev/aac"
 INPUT_DIR = "dev/aac"  # Change this to "dev/wav" if you have wav files
 OUTPUT_DIR = os.path.join(config.DATA_FOLDER_PATH, "dev/mixed_wav")
