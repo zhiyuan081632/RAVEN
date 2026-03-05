@@ -28,6 +28,7 @@ import librosa
 import torchvision
 from glob import glob
 from tqdm import tqdm
+from datetime import datetime
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import config
@@ -36,6 +37,12 @@ from models.fusion import Fusion
 from utils.spec_audio_conversion import (
     convert_to_complex_spectrogram_with_compression_torch,
     convert_to_audio_from_complex_spectrogram_after_compression_torch
+)
+from torchmetrics.audio import (
+    SignalNoiseRatio,
+    PerceptualEvaluationSpeechQuality,
+    ScaleInvariantSignalDistortionRatio,
+    ShortTimeObjectiveIntelligibility
 )
 
 
@@ -239,6 +246,14 @@ class AudioEnhancer:
         self.model.to(device)
         self.model.eval()
         print("Fusion模型加载完成")
+        
+        # 性能指标
+        self.metrics = {
+            'snr': SignalNoiseRatio().to(device),
+            'pesq': PerceptualEvaluationSpeechQuality(16000, 'wb').to(device),
+            'sisdr': ScaleInvariantSignalDistortionRatio().to(device),
+            'estoi': ShortTimeObjectiveIntelligibility(16000, True).to(device),
+        }
     
     def _get_extractor(self, encoder_name):
         """懒加载特征提取器"""
@@ -462,6 +477,62 @@ class AudioEnhancer:
         return torch.tensor(features, dtype=torch.float32)
     
     @torch.no_grad()
+    def compute_metrics(self, clean_audio, noisy_audio, enhanced_audio):
+        """
+        计算性能指标
+        
+        Returns:
+            dict: 包含各项指标的字典
+        """
+        clean_t = torch.tensor(clean_audio, dtype=torch.float32).unsqueeze(0).to(self.device)
+        noisy_t = torch.tensor(noisy_audio, dtype=torch.float32).unsqueeze(0).to(self.device)
+        enhanced_t = torch.tensor(enhanced_audio, dtype=torch.float32).unsqueeze(0).to(self.device)
+        
+        results = {}
+        
+        # SNR
+        try:
+            snr_enhanced = self.metrics['snr'](enhanced_t, clean_t).item()
+            snr_noisy = self.metrics['snr'](noisy_t, clean_t).item()
+            results['snr'] = snr_enhanced
+            results['snr_gain'] = snr_enhanced - snr_noisy
+        except Exception as e:
+            results['snr'] = float('nan')
+            results['snr_gain'] = float('nan')
+        
+        # SI-SDR
+        try:
+            sisdr_enhanced = self.metrics['sisdr'](enhanced_t, clean_t).item()
+            sisdr_noisy = self.metrics['sisdr'](noisy_t, clean_t).item()
+            results['sisdr'] = sisdr_enhanced
+            results['sisdr_gain'] = sisdr_enhanced - sisdr_noisy
+        except Exception as e:
+            results['sisdr'] = float('nan')
+            results['sisdr_gain'] = float('nan')
+        
+        # PESQ
+        try:
+            results['pesq'] = self.metrics['pesq'](enhanced_t, clean_t).item()
+        except Exception as e:
+            results['pesq'] = float('nan')
+        
+        # ESTOI
+        try:
+            results['estoi'] = self.metrics['estoi'](enhanced_t, clean_t).item()
+        except Exception as e:
+            results['estoi'] = float('nan')
+        
+        return results
+    
+    def _print_metrics(self, metrics, prefix="  "):
+        """打印指标"""
+        print(f"{prefix}📊 性能指标:")
+        print(f"{prefix}   SNR:  {metrics['snr']:.4f} dB  (Gain: {metrics['snr_gain']:+.4f} dB)")
+        print(f"{prefix}   SISDR: {metrics['sisdr']:.4f} dB  (Gain: {metrics['sisdr_gain']:+.4f} dB)")
+        print(f"{prefix}   PESQ:  {metrics['pesq']:.4f}")
+        print(f"{prefix}   ESTOI: {metrics['estoi']:.4f}")
+
+    @torch.no_grad()
     def enhance(self, noisy_audio, visual_features):
         """增强音频"""
         audio = torch.tensor(noisy_audio, dtype=torch.float32).unsqueeze(0).to(self.device)
@@ -492,12 +563,8 @@ class AudioEnhancer:
         """
         处理单个视频/音频文件
         
-        Args:
-            input_path: 输入MP4或音频文件
-            output_dir: 输出目录
-            noise_path: 噪声文件路径 (可选，不提供则使用白噪声)
-            snr_db: 信噪比 (dB)
-            visual_feat_path: 视觉特征文件路径 (可选)
+        Returns:
+            dict or None: 性能指标字典，失败时返回None
         """
         try:
             base_name = os.path.splitext(os.path.basename(input_path))[0]
@@ -512,7 +579,6 @@ class AudioEnhancer:
             if noise_path and os.path.exists(noise_path):
                 noise, _ = librosa.load(noise_path, sr=self.sample_rate)
             else:
-                # 使用白噪声
                 noise = np.random.randn(len(clean_audio)) * 0.1
             
             noisy_audio = self.add_noise(clean_audio, noise, snr_db)
@@ -525,7 +591,12 @@ class AudioEnhancer:
             print(f"  增强处理...")
             enhanced_audio = self.enhance(noisy_audio, visual_feat)
             
-            # 5. 保存结果
+            # 5. 计算性能指标
+            print(f"  计算指标...")
+            metrics = self.compute_metrics(clean_audio, noisy_audio, enhanced_audio)
+            self._print_metrics(metrics)
+            
+            # 6. 保存结果
             clean_path = os.path.join(output_dir, f"{base_name}_clean.wav")
             noisy_path = os.path.join(output_dir, f"{base_name}_noisy_snr{snr_db}.wav")
             enhanced_path = os.path.join(output_dir, f"{base_name}_enhanced_snr{snr_db}.wav")
@@ -539,28 +610,62 @@ class AudioEnhancer:
             print(f"     带噪音频: {noisy_path}")
             print(f"     增强音频: {enhanced_path}")
             
-            return True
+            return metrics
         except Exception as e:
             print(f"  ❌ 错误: {e}")
             import traceback
             traceback.print_exc()
-            return False
+            return None
     
     def process_directory(self, input_dir, output_dir, noise_path=None, snr_db=0):
         """处理目录中的所有视频文件"""
         video_files = glob(os.path.join(input_dir, '**', '*.mp4'), recursive=True)
         print(f"找到 {len(video_files)} 个视频文件")
         
+        all_metrics = []
         success_count = 0
         for video_path in tqdm(video_files, desc="处理中"):
             print(f"\n处理: {video_path}")
             rel_path = os.path.relpath(video_path, input_dir)
             sub_output_dir = os.path.join(output_dir, os.path.dirname(rel_path))
             
-            if self.process_file(video_path, sub_output_dir, noise_path, snr_db):
+            metrics = self.process_file(video_path, sub_output_dir, noise_path, snr_db)
+            if metrics is not None:
                 success_count += 1
+                all_metrics.append(metrics)
         
-        print(f"\n完成! 成功: {success_count}/{len(video_files)}")
+        # 汇总统计
+        print(f"\n{'='*60}")
+        print(f"处理完成! 成功: {success_count}/{len(video_files)}")
+        
+        if all_metrics:
+            avg_metrics = {}
+            for key in all_metrics[0].keys():
+                vals = [m[key] for m in all_metrics if not np.isnan(m[key])]
+                avg_metrics[key] = np.mean(vals) if vals else float('nan')
+            
+            print(f"\n📊 平均性能指标 ({len(all_metrics)} 个文件):")
+            print(f"   SNR:   {avg_metrics['snr']:.4f} dB  (Gain: {avg_metrics['snr_gain']:+.4f} dB)")
+            print(f"   SISDR: {avg_metrics['sisdr']:.4f} dB  (Gain: {avg_metrics['sisdr_gain']:+.4f} dB)")
+            print(f"   PESQ:  {avg_metrics['pesq']:.4f}")
+            print(f"   ESTOI: {avg_metrics['estoi']:.4f}")
+            print(f"{'='*60}")
+            
+            # 写入日志文件
+            log_path = os.path.join(output_dir, "results.log")
+            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            with open(log_path, "a") as f:
+                f.write(f"\n[{timestamp}]\n")
+                f.write(f"  visual_encoder: {self.visual_encoder}\n")
+                f.write(f"  input_dir: {input_dir}\n")
+                f.write(f"  snr: {snr_db}\n")
+                f.write(f"  noise: {noise_path or 'white_noise'}\n")
+                f.write(f"  total: {len(video_files)}, success: {success_count}\n")
+                f.write(f"  AVG SNR: {avg_metrics['snr']:.4f}, SNR Gain: {avg_metrics['snr_gain']:.4f}\n")
+                f.write(f"  AVG SISDR: {avg_metrics['sisdr']:.4f}, SISDR Gain: {avg_metrics['sisdr_gain']:.4f}\n")
+                f.write(f"  AVG PESQ: {avg_metrics['pesq']:.4f}\n")
+                f.write(f"  AVG ESTOI: {avg_metrics['estoi']:.4f}\n")
+            print(f"\n日志已保存: {log_path}")
 
 
 def main():
@@ -616,7 +721,22 @@ def main():
     # 处理输入
     if os.path.isfile(args.input):
         print(f"处理文件: {args.input}")
-        enhancer.process_file(args.input, args.output, args.noise, args.snr, args.visual_feat)
+        metrics = enhancer.process_file(args.input, args.output, args.noise, args.snr, args.visual_feat)
+        if metrics:
+            # 单文件也写log
+            log_path = os.path.join(args.output, "results.log")
+            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            with open(log_path, "a") as f:
+                f.write(f"\n[{timestamp}]\n")
+                f.write(f"  visual_encoder: {args.visual_encoder}\n")
+                f.write(f"  input: {args.input}\n")
+                f.write(f"  snr: {args.snr}\n")
+                f.write(f"  noise: {args.noise or 'white_noise'}\n")
+                f.write(f"  SNR: {metrics['snr']:.4f}, SNR Gain: {metrics['snr_gain']:.4f}\n")
+                f.write(f"  SISDR: {metrics['sisdr']:.4f}, SISDR Gain: {metrics['sisdr_gain']:.4f}\n")
+                f.write(f"  PESQ: {metrics['pesq']:.4f}\n")
+                f.write(f"  ESTOI: {metrics['estoi']:.4f}\n")
+            print(f"\n日志已保存: {log_path}")
     elif os.path.isdir(args.input):
         print(f"处理目录: {args.input}")
         enhancer.process_directory(args.input, args.output, args.noise, args.snr)
