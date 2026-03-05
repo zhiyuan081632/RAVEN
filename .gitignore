@@ -181,3 +181,6 @@ cython_debug/
 *.model
 *.pth
 *.ckpt*
+
+# Test output
+src/output/

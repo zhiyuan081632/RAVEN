@@ -81,6 +81,14 @@ if __name__ == "__main__":
 
     os.environ["GLOG_minloglevel"] = "3"
     multiprocessing.set_start_method('spawn', True)
+    
+    print("visual_encoder:", args.visual_encoder)
+    print("ckpt_path:", args.ckpt_path)
+    print("test_condition:", args.test_condition)
+    print("test_snr:", args.test_snr)
+    print("embedding_size:", embedding_size)
+    print("batch_size:", args.batch_size)
+    print("num_workers:", args.num_workers)
 
     test(
         visual_encoder=args.visual_encoder,
