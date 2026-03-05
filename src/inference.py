@@ -4,18 +4,22 @@
 输入MP4视频文件，提取视觉特征，对音频加噪后进行增强
 支持从预生成npy加载特征，也支持从MP4在线提取
 
+支持三种测试场景:
+    - noise_only: 目标语音 + 环境噪声
+    - one_interfering_speaker: 目标语音 + 1个干扰说话人
+    - three_interfering_speakers: 目标语音 + 3个干扰说话人
+
 用法:
-    # 在线提取特征 + 增强 (默认)
-    python inference.py --input video.mp4 --output ./output --ckpt model.ckpt
+    # 噪声场景 (默认)
+    python inference.py --input video.mp4 --output ./output --ckpt_path model.ckpt --noise noise.wav --snr -5
     
-    # 优先使用npy缓存，不存在时在线提取
-    python inference.py --input video.mp4 --output ./output --ckpt model.ckpt
+    # 1个干扰说话人
+    python inference.py --input video.mp4 --output ./output --ckpt_path model.ckpt \
+        --condition one_interfering_speaker --interfering speaker.mp4 --snr -5
     
-    # 指定SNR和噪声文件
-    python inference.py --input video.mp4 --output ./output --ckpt model.ckpt --snr -5 --noise noise.wav
-    
-    # 强制使用已有npy (不在线提取)
-    python inference.py --input video.mp4 --output ./output --ckpt model.ckpt --no_extract
+    # 3个干扰说话人
+    python inference.py --input video.mp4 --output ./output --ckpt_path model.ckpt \
+        --condition three_interfering_speakers --interfering s1.mp4 s2.mp4 s3.mp4 --snr -5
 """
 
 import argparse
@@ -344,6 +348,77 @@ class AudioEnhancer:
         
         return mixed_audio
     
+    def mix_audio(self, clean_audio, condition, snr_db, noise_path=None, interfering_paths=None):
+        """
+        根据测试条件混合音频
+        
+        Args:
+            clean_audio: 干净目标音频
+            condition: 测试条件 (noise_only / one_interfering_speaker / three_interfering_speakers)
+            snr_db: 信噪比 (dB)
+            noise_path: 噪声文件路径 (noise_only时用)
+            interfering_paths: 干扰说话人MP4/音频路径列表
+        
+        Returns:
+            mixed_audio: 混合后的音频
+            condition_desc: 条件描述字符串
+        """
+        if condition == "noise_only":
+            # 噪声场景
+            if noise_path and os.path.exists(noise_path):
+                noise, _ = librosa.load(noise_path, sr=self.sample_rate)
+            else:
+                noise = np.random.randn(len(clean_audio)) * 0.1
+            mixed = self.add_noise(clean_audio, noise, snr_db)
+            desc = f"noise_only (noise={noise_path or 'white_noise'})"
+            
+        elif condition == "one_interfering_speaker":
+            # 1个干扰说话人
+            if not interfering_paths or len(interfering_paths) < 1:
+                print("  警告: 未提供干扰说话人，使用白噪声")
+                noise = np.random.randn(len(clean_audio)) * 0.1
+                mixed = self.add_noise(clean_audio, noise, snr_db)
+                desc = "one_interfering_speaker (fallback: white_noise)"
+            else:
+                interfering_audio = self.load_audio(interfering_paths[0])
+                interfering_audio = librosa.util.normalize(interfering_audio)
+                mixed = self.add_noise(clean_audio, interfering_audio, snr_db)
+                desc = f"one_interfering_speaker ({os.path.basename(interfering_paths[0])})"
+            
+        elif condition == "three_interfering_speakers":
+            # 3个干扰说话人
+            if not interfering_paths or len(interfering_paths) < 3:
+                n_given = len(interfering_paths) if interfering_paths else 0
+                print(f"  警告: 需要3个干扰说话人，但只提供了{n_given}个")
+                if n_given == 0:
+                    noise = np.random.randn(len(clean_audio)) * 0.1
+                    mixed = self.add_noise(clean_audio, noise, snr_db)
+                    desc = "three_interfering_speakers (fallback: white_noise)"
+                else:
+                    # 用已有的干扰说话人
+                    interference = np.zeros(len(clean_audio))
+                    names = []
+                    for p in interfering_paths[:3]:
+                        audio = self.load_audio(p)
+                        interference += librosa.util.normalize(audio)
+                        names.append(os.path.basename(p))
+                    mixed = self.add_noise(clean_audio, interference, snr_db)
+                    desc = f"three_interfering_speakers ({', '.join(names)})"
+            else:
+                # 叠3个干扰说话人音频相加
+                interference = np.zeros(len(clean_audio))
+                names = []
+                for p in interfering_paths[:3]:
+                    audio = self.load_audio(p)
+                    interference += librosa.util.normalize(audio)
+                    names.append(os.path.basename(p))
+                mixed = self.add_noise(clean_audio, interference, snr_db)
+                desc = f"three_interfering_speakers ({', '.join(names)})"
+        else:
+            raise ValueError(f"不支持的测试条件: {condition}")
+        
+        return mixed, desc
+    
     def _load_single_feature(self, video_path, feat_dir_name, encoder_name=None):
         """加载单个编码器的特征 (优先npy缓存，不存在时在线提取)"""
         feat_path = video_path.replace("/mp4/", f"/{feat_dir_name}/")
@@ -559,9 +634,19 @@ class AudioEnhancer:
         
         return enhanced_audio.squeeze(0).cpu().numpy()
     
-    def process_file(self, input_path, output_dir, noise_path=None, snr_db=0, visual_feat_path=None):
+    def process_file(self, input_path, output_dir, condition="noise_only", snr_db=0, 
+                     noise_path=None, interfering_paths=None, visual_feat_path=None):
         """
         处理单个视频/音频文件
+        
+        Args:
+            input_path: 输入MP4或音频文件
+            output_dir: 输出目录
+            condition: 测试条件 (noise_only/one_interfering_speaker/three_interfering_speakers)
+            snr_db: 信噪比 (dB)
+            noise_path: 噪声文件路径
+            interfering_paths: 干扰说话人MP4路径列表
+            visual_feat_path: 视觉特征文件路径
         
         Returns:
             dict or None: 性能指标字典，失败时返回None
@@ -573,15 +658,14 @@ class AudioEnhancer:
             # 1. 加载干净音频
             print(f"  提取音频...")
             clean_audio = self.load_audio(input_path)
+            clean_audio = librosa.util.normalize(clean_audio)
             
-            # 2. 加载噪声并混合
-            print(f"  添加噪声 (SNR={snr_db}dB)...")
-            if noise_path and os.path.exists(noise_path):
-                noise, _ = librosa.load(noise_path, sr=self.sample_rate)
-            else:
-                noise = np.random.randn(len(clean_audio)) * 0.1
-            
-            noisy_audio = self.add_noise(clean_audio, noise, snr_db)
+            # 2. 根据测试条件混合音频
+            print(f"  混合音频 (condition={condition}, SNR={snr_db}dB)...")
+            noisy_audio, cond_desc = self.mix_audio(
+                clean_audio, condition, snr_db, noise_path, interfering_paths
+            )
+            print(f"  条件: {cond_desc}")
             
             # 3. 加载视觉特征
             print(f"  加载视觉特征...")
@@ -597,9 +681,10 @@ class AudioEnhancer:
             self._print_metrics(metrics)
             
             # 6. 保存结果
+            tag = f"{condition}_snr{snr_db}"
             clean_path = os.path.join(output_dir, f"{base_name}_clean.wav")
-            noisy_path = os.path.join(output_dir, f"{base_name}_noisy_snr{snr_db}.wav")
-            enhanced_path = os.path.join(output_dir, f"{base_name}_enhanced_snr{snr_db}.wav")
+            noisy_path = os.path.join(output_dir, f"{base_name}_noisy_{tag}.wav")
+            enhanced_path = os.path.join(output_dir, f"{base_name}_enhanced_{tag}.wav")
             
             sf.write(clean_path, clean_audio, self.sample_rate)
             sf.write(noisy_path, noisy_audio, self.sample_rate)
@@ -617,7 +702,8 @@ class AudioEnhancer:
             traceback.print_exc()
             return None
     
-    def process_directory(self, input_dir, output_dir, noise_path=None, snr_db=0):
+    def process_directory(self, input_dir, output_dir, condition="noise_only", snr_db=0,
+                          noise_path=None, interfering_paths=None):
         """处理目录中的所有视频文件"""
         video_files = glob(os.path.join(input_dir, '**', '*.mp4'), recursive=True)
         print(f"找到 {len(video_files)} 个视频文件")
@@ -629,7 +715,9 @@ class AudioEnhancer:
             rel_path = os.path.relpath(video_path, input_dir)
             sub_output_dir = os.path.join(output_dir, os.path.dirname(rel_path))
             
-            metrics = self.process_file(video_path, sub_output_dir, noise_path, snr_db)
+            metrics = self.process_file(
+                video_path, sub_output_dir, condition, snr_db, noise_path, interfering_paths
+            )
             if metrics is not None:
                 success_count += 1
                 all_metrics.append(metrics)
@@ -658,8 +746,10 @@ class AudioEnhancer:
                 f.write(f"\n[{timestamp}]\n")
                 f.write(f"  visual_encoder: {self.visual_encoder}\n")
                 f.write(f"  input_dir: {input_dir}\n")
+                f.write(f"  condition: {condition}\n")
                 f.write(f"  snr: {snr_db}\n")
-                f.write(f"  noise: {noise_path or 'white_noise'}\n")
+                f.write(f"  noise: {noise_path or 'N/A'}\n")
+                f.write(f"  interfering: {interfering_paths or 'N/A'}\n")
                 f.write(f"  total: {len(video_files)}, success: {success_count}\n")
                 f.write(f"  AVG SNR: {avg_metrics['snr']:.4f}, SNR Gain: {avg_metrics['snr_gain']:.4f}\n")
                 f.write(f"  AVG SISDR: {avg_metrics['sisdr']:.4f}, SISDR Gain: {avg_metrics['sisdr_gain']:.4f}\n")
@@ -683,8 +773,13 @@ def main():
                         help="视觉编码器类型")
     parser.add_argument("--snr", type=int, default=0,
                         help="信噪比 (dB), 默认0")
+    parser.add_argument("--condition", type=str, default="noise_only",
+                        choices=["noise_only", "one_interfering_speaker", "three_interfering_speakers"],
+                        help="测试条件")
     parser.add_argument("--noise", type=str, default=None,
-                        help="噪声文件路径 (可选，不提供则使用白噪声)")
+                        help="噪声文件路径 (noise_only时使用，不提供则白噪声)")
+    parser.add_argument("--interfering", type=str, nargs='+', default=None,
+                        help="干扰说话人MP4文件路径 (1个或3个)")
     parser.add_argument("--visual_feat", type=str, default=None,
                         help="视觉特征文件路径 (可选)")
     parser.add_argument("--no_extract", action="store_true",
@@ -713,15 +808,22 @@ def main():
     print(f"\n配置:")
     print(f"  输入: {args.input}")
     print(f"  输出: {args.output}")
+    print(f"  条件: {args.condition}")
     print(f"  SNR: {args.snr} dB")
-    print(f"  噪声: {args.noise or '白噪声'}")
+    if args.condition == "noise_only":
+        print(f"  噪声: {args.noise or '白噪声'}")
+    else:
+        print(f"  干扰说话人: {args.interfering or '未指定'}")
     print(f"  在线提取: {'关闭' if args.no_extract else '开启 (优先用npy缓存)'}")
     print()
     
     # 处理输入
     if os.path.isfile(args.input):
         print(f"处理文件: {args.input}")
-        metrics = enhancer.process_file(args.input, args.output, args.noise, args.snr, args.visual_feat)
+        metrics = enhancer.process_file(
+            args.input, args.output, args.condition, args.snr,
+            args.noise, args.interfering, args.visual_feat
+        )
         if metrics:
             # 单文件也写log
             log_path = os.path.join(args.output, "results.log")
@@ -730,8 +832,10 @@ def main():
                 f.write(f"\n[{timestamp}]\n")
                 f.write(f"  visual_encoder: {args.visual_encoder}\n")
                 f.write(f"  input: {args.input}\n")
+                f.write(f"  condition: {args.condition}\n")
                 f.write(f"  snr: {args.snr}\n")
-                f.write(f"  noise: {args.noise or 'white_noise'}\n")
+                f.write(f"  noise: {args.noise or 'N/A'}\n")
+                f.write(f"  interfering: {args.interfering or 'N/A'}\n")
                 f.write(f"  SNR: {metrics['snr']:.4f}, SNR Gain: {metrics['snr_gain']:.4f}\n")
                 f.write(f"  SISDR: {metrics['sisdr']:.4f}, SISDR Gain: {metrics['sisdr_gain']:.4f}\n")
                 f.write(f"  PESQ: {metrics['pesq']:.4f}\n")
@@ -739,7 +843,10 @@ def main():
             print(f"\n日志已保存: {log_path}")
     elif os.path.isdir(args.input):
         print(f"处理目录: {args.input}")
-        enhancer.process_directory(args.input, args.output, args.noise, args.snr)
+        enhancer.process_directory(
+            args.input, args.output, args.condition, args.snr,
+            args.noise, args.interfering
+        )
     else:
         print(f"错误: 输入路径不存在: {args.input}")
         sys.exit(1)

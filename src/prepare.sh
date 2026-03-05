@@ -1,6 +1,6 @@
 
 # Convert full data from mp4 to ma4c/wav
-# ./data/extract_vox2_mp4_to_m4a.sh
+# ./data/convert_vox2_mp4_to_m4a.sh
 
 # 配置开关: "small" 或 "full"
 MODE="small"
@@ -22,18 +22,23 @@ fi
 python -W ignore utils/mix_speech_gpu.py
 
 # Extract visual feature with different methods
-# VSRiW
+## VSRiW
 python data/VSRiW_extract_visual_features.py 
 
-# TalkNet
+## TalkNet
 python data/TalkNet_extract_visual_features.py
 
-# LoCoNet
+## LoCoNet
 python data/LoCoNet_extract_visual_features.py
 
 # AVHuBERT
 python data/AVHuBERT_extract_visual_features.py
 
 
-# Generate test data
-python -W ignore data/generate_test_data.py --condition=noise_only --snr=-10
+# Generate test data 
+## noise_only 
+python -W ignore data/generate_test_data.py --condition noise_only --snr="-10,-5,0"
+
+## one_interfering_speaker
+python -W ignore data/generate_test_data.py --condition one_interfering_speaker --snr="-10,-5,0"
+
