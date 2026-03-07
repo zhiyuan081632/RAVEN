@@ -25,35 +25,19 @@ class VoxCeleb2(data.Dataset):
         self.musan_fps = musan_fps[musan_fps["split"] == self.split]
         if self.split == "train":
             self.data = all_data[all_data["split"] == self.split]["audio_fp"]
-            if "AVHuBERT" in visual_encoder:
-                failed_fp = os.path.join(data_path, "failed_avhubert_frontE_feat_split.txt")
-                print(f"  Loading failed sample filtering file: {failed_fp}")
-                if os.path.exists(failed_fp) and os.path.getsize(failed_fp) > 0:
-                    failed_raw = pd.read_csv(failed_fp, header=None, comment='#')[0]
-                    print(f"  Failed file has {len(failed_raw)} entries")
-                    if len(failed_raw) > 0:
-                        print(f"  Sample failed path (raw): {failed_raw.iloc[0]}")
-                    # 将 failed 路径转为相对路径并转换为 aac 格式
-                    # e.g. /mnt/.../dev/mp4/id/video/00300.mp4 -> dev/aac/id/video/00300.m4a
-                    failed = failed_raw.str.strip()
-                    failed = failed.str.replace(data_path + "/", "", regex=False)
-                    failed = failed.str.replace("/mp4/", "/aac/").str.replace(".mp4", ".m4a")
-                    if len(failed) > 0:
-                        print(f"  Sample failed path (converted): {failed.iloc[0]}")
-                        print(f"  Sample data path: {self.data.iloc[0]}")
-                    before_count = len(self.data)
-                    self.data = self.data[~self.data.isin(failed)]
-                    after_count = len(self.data)
-                    print(f"  Filtered out {before_count - after_count} failed samples (remaining: {after_count})")
-                else:
-                    print(f"  Warning: {failed_fp} does not exist or is empty, skipping AVHuBERT failed sample filtering")
+            # 过滤失败样本
+            self._filter_failed_samples(visual_encoder, data_path)
         elif self.split == "val":
             self.data = pd.read_csv("./data/VoxCeleb2_val_1000_fps.txt", header=None)[0]
+            # val 也需要过滤失败样本
+            self._filter_failed_samples(visual_encoder, data_path)
         
         elif self.split == "test":
             self.data = pd.read_csv("./data/VoxCeleb2_test_1000_fps.txt", header=None)[0]
             self.condition = condition
             self.snr = snr
+            # test 也需要过滤失败样本
+            self._filter_failed_samples(visual_encoder, data_path)
         self.visual_encoder = visual_encoder
         self.embedding_size = embedding_size
         
@@ -162,6 +146,41 @@ class VoxCeleb2(data.Dataset):
             face_embed2 = augment_visual(face_embed2, fe2)[0]
 
         return torch.cat((face_embed1, face_embed2), dim=1)
+
+    def _filter_failed_samples(self, visual_encoder, data_path):
+        """过滤提取失败的样本"""
+        encoder_failed_files = {
+            "VSRiW": "failed_VSRiW_frontE_feat_split.txt",
+            "TalkNet": "failed_TalkNet_frontE_feat_split.txt",
+            "Loconet": "failed_Loconet_frontE_feat_split.txt",
+            "AVHuBERT": "failed_avhubert_frontE_feat_split.txt",
+        }
+        # 找出当前配置需要检查的编码器
+        encoders_to_check = []
+        for enc_name, failed_file in encoder_failed_files.items():
+            if enc_name in visual_encoder:
+                encoders_to_check.append((enc_name, failed_file))
+        
+        for enc_name, failed_file in encoders_to_check:
+            failed_fp = os.path.join(data_path, failed_file)
+            if os.path.exists(failed_fp) and os.path.getsize(failed_fp) > 0:
+                print(f"  Loading {enc_name} failed sample filtering file: {failed_fp}")
+                failed_raw = pd.read_csv(failed_fp, header=None, comment='#')[0]
+                print(f"    Failed file has {len(failed_raw)} entries")
+                if len(failed_raw) > 0:
+                    print(f"    Sample failed path (raw): {failed_raw.iloc[0]}")
+                # 将 failed 路径转为相对路径并转换为 aac 格式
+                failed = failed_raw.str.strip()
+                failed = failed.str.replace(data_path + "/", "", regex=False)
+                failed = failed.str.replace("/mp4/", "/aac/").str.replace(".mp4", ".m4a")
+                if len(failed) > 0:
+                    print(f"    Sample failed path (converted): {failed.iloc[0]}")
+                before_count = len(self.data)
+                self.data = self.data[~self.data.isin(failed)]
+                after_count = len(self.data)
+                print(f"    Filtered out {before_count - after_count} failed {enc_name} samples (remaining: {after_count})")
+            else:
+                print(f"  {enc_name} failed file not found or empty: {failed_fp} (skipping)")
     
     def _add_embeddings(self, audio_fp, combined_features):
         fe1, fe2 = combined_features.split("_")[0], combined_features.split("_")[1]

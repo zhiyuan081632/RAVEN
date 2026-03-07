@@ -78,7 +78,8 @@ class TalkNetBatchedPreprocessing:
         self.device = device
 
     def extract_features(self):
-        failed_text_path = os.path.join(config.DATA_FOLDER_PATH, f"failed_TalkNet_frontE_feat_{self.split}.txt")
+        # 使用统一的失败记录文件（不分 train/val/test）
+        failed_text_path = os.path.join(config.DATA_FOLDER_PATH, "failed_TalkNet_frontE_feat_split.txt")
         success_count = 0
         skip_count = 0
         failure_count = 0
