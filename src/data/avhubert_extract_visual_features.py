@@ -143,11 +143,12 @@ def random_5s_clip(video, frame_rate=25):
         return np.concatenate((video, pad_array), axis=0)
 
 def custom_collate(batch):
-    """Custom collate function to handle None values in batch"""
-    batch = [item for item in batch if item[0] is not None]
-    if len(batch) == 0:
-        return None, None
-    return batch[0]  # Return single item since batch_size=1
+    """Custom collate function to handle None values in batch, preserving file paths"""
+    # batch_size=1, so batch has only one item: (video_tensor, fp)
+    video_tensor, fp = batch[0]
+    if video_tensor is None:
+        return None, fp  # 保留 fp 以便记录失败
+    return video_tensor, fp
 
 
 class AVHuBERTBatchedPreprocessing:

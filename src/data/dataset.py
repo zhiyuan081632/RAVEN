@@ -26,9 +26,27 @@ class VoxCeleb2(data.Dataset):
         if self.split == "train":
             self.data = all_data[all_data["split"] == self.split]["audio_fp"]
             if "AVHuBERT" in visual_encoder:
-                failed = pd.read_csv("./data/failed_avhubert_frontE.txt", header=None)[0]
-                failed = failed.str.replace("/mp4/", "/aac/").str.replace(".mp4", ".m4a")
-                self.data = self.data[~self.data.isin(failed)]
+                failed_fp = os.path.join(data_path, "failed_avhubert_frontE_feat_split.txt")
+                print(f"  Loading failed sample filtering file: {failed_fp}")
+                if os.path.exists(failed_fp) and os.path.getsize(failed_fp) > 0:
+                    failed_raw = pd.read_csv(failed_fp, header=None, comment='#')[0]
+                    print(f"  Failed file has {len(failed_raw)} entries")
+                    if len(failed_raw) > 0:
+                        print(f"  Sample failed path (raw): {failed_raw.iloc[0]}")
+                    # 将 failed 路径转为相对路径并转换为 aac 格式
+                    # e.g. /mnt/.../dev/mp4/id/video/00300.mp4 -> dev/aac/id/video/00300.m4a
+                    failed = failed_raw.str.strip()
+                    failed = failed.str.replace(data_path + "/", "", regex=False)
+                    failed = failed.str.replace("/mp4/", "/aac/").str.replace(".mp4", ".m4a")
+                    if len(failed) > 0:
+                        print(f"  Sample failed path (converted): {failed.iloc[0]}")
+                        print(f"  Sample data path: {self.data.iloc[0]}")
+                    before_count = len(self.data)
+                    self.data = self.data[~self.data.isin(failed)]
+                    after_count = len(self.data)
+                    print(f"  Filtered out {before_count - after_count} failed samples (remaining: {after_count})")
+                else:
+                    print(f"  Warning: {failed_fp} does not exist or is empty, skipping AVHuBERT failed sample filtering")
         elif self.split == "val":
             self.data = pd.read_csv("./data/VoxCeleb2_val_1000_fps.txt", header=None)[0]
         
@@ -46,6 +64,14 @@ class VoxCeleb2(data.Dataset):
             "AVHuBERT": "/AVHuBERT_feats/",
             "VSRIW_LRS3": "/vsriw_lrs3/",
             
+        }
+        # 各编码器的真实维度，用于零填充
+        self.encoder_dim_dict = {
+            "VSRiW": 512,
+            "TalkNet": 512,
+            "Loconet": 512,
+            "AVHuBERT": 768,
+            "VSRIW_LRS3": 512,
         }
         self.device = "cuda"
         
@@ -110,25 +136,24 @@ class VoxCeleb2(data.Dataset):
         fe_fp1 = audio_fp.replace("/aac/", self.embedding_path_dict[fe1]).replace(".m4a", ".npy")
         fe_fp2 = audio_fp.replace("/aac/", self.embedding_path_dict[fe2]).replace(".m4a", ".npy")
 
-        # 计算每个编码器应有的维度（假设对称分配）
-        half_size = self.embedding_size // 2
+        # 使用各编码器的真实维度
+        dim1 = self.encoder_dim_dict.get(fe1, 512)
+        dim2 = self.encoder_dim_dict.get(fe2, 512)
         
         # 分别加载每个编码器的 embedding
         try:
             embed1 = np.load(fe_fp1, mmap_mode="r")
             embed1 = self._crop_pad_face_embeddings(embed1)
         except (FileNotFoundError, OSError, ValueError) as e:
-            print(f"Warning: Failed to load {fe_fp1}, using zeros. Error: {e}")
-            # 使用零填充，维度为总维度的一半
-            embed1 = np.zeros((125, half_size), dtype=np.float32)
+            print(f"Warning: Failed to load {fe_fp1}, using zeros ({dim1}d). Error: {e}")
+            embed1 = np.zeros((125, dim1), dtype=np.float32)
 
         try:
             embed2 = np.load(fe_fp2, mmap_mode="r")
             embed2 = self._crop_pad_face_embeddings(embed2)
         except (FileNotFoundError, OSError, ValueError) as e:
-            print(f"Warning: Failed to load {fe_fp2}, using zeros. Error: {e}")
-            # 使用零填充，维度为总维度的一半
-            embed2 = np.zeros((125, half_size), dtype=np.float32)
+            print(f"Warning: Failed to load {fe_fp2}, using zeros ({dim2}d). Error: {e}")
+            embed2 = np.zeros((125, dim2), dtype=np.float32)
 
         face_embed1, face_embed2 = torch.tensor(embed1), torch.tensor(embed2)
 
@@ -143,21 +168,24 @@ class VoxCeleb2(data.Dataset):
         fe_fp1 = audio_fp.replace("/aac/", self.embedding_path_dict[fe1]).replace(".m4a", ".npy")
         fe_fp2 = audio_fp.replace("/aac/", self.embedding_path_dict[fe2]).replace(".m4a", ".npy")
 
-        # 计算每个编码器应有的维度
-        half_size = self.embedding_size // 2
+        # 使用各编码器的真实维度（addition 模式要求维度相同）
+        dim1 = self.encoder_dim_dict.get(fe1, 512)
+        dim2 = self.encoder_dim_dict.get(fe2, 512)
+        # addition 模式只支持维度相同的编码器
+        assert dim1 == dim2, f"Addition mode requires same dimensions, got {fe1}={dim1} and {fe2}={dim2}"
         
         # 分别加载每个编码器的 embedding
         try:
             embed1 = np.load(fe_fp1, mmap_mode="r")
             embed1 = self._crop_pad_face_embeddings(embed1)
         except (FileNotFoundError, OSError, ValueError):
-            embed1 = np.zeros((125, half_size), dtype=np.float32)
+            embed1 = np.zeros((125, dim1), dtype=np.float32)
 
         try:
             embed2 = np.load(fe_fp2, mmap_mode="r")
             embed2 = self._crop_pad_face_embeddings(embed2)
         except (FileNotFoundError, OSError, ValueError):
-            embed2 = np.zeros((125, half_size), dtype=np.float32)
+            embed2 = np.zeros((125, dim2), dtype=np.float32)
 
         face_embed1, face_embed2 = torch.tensor(embed1), torch.tensor(embed2)
         

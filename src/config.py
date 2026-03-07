@@ -26,7 +26,7 @@ embedding_size_dict = {
     
 }
 
-VISUAL_ENCODER = "VSRiW_TalkNet_concatenate"
+VISUAL_ENCODER = "AVHuBERT_TalkNet_concatenate"
 EMBEDDING_SIZE = embedding_size_dict[VISUAL_ENCODER]
 
 AVHUBERT_PATH = os.path.join(PROJECT_ROOT, "av_hubert/avhubert")

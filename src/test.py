@@ -89,6 +89,11 @@ if __name__ == "__main__":
     print("embedding_size:", embedding_size)
     print("batch_size:", args.batch_size)
     print("num_workers:", args.num_workers)
+    print()
+    print("=" * 60)
+    print("Input data:", os.path.join(config.DATA_FOLDER_PATH, f"dev/mixed_wav/{args.test_condition}/{args.test_snr}"))
+    print("Output data:", os.path.join(config.DATA_FOLDER_PATH, "dev/enhanced_wav"))
+    print("=" * 60)
 
     test(
         visual_encoder=args.visual_encoder,
