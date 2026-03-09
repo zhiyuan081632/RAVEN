@@ -61,8 +61,8 @@ if __name__ == "__main__":
     parser.add_argument("--test_condition", type=str, default=config.TEST_CONDITION,
                         choices=config.TEST_ALL_CONDITIONS,
                         help="Test condition")
-    parser.add_argument("--test_snr", type=int, default=config.TEST_SNR,
-                        choices=config.TEST_ALL_SNRs,
+    parser.add_argument("--test_snr", type=str, default=str(config.TEST_SNR),
+                        choices=[str(s) for s in config.TEST_ALL_SNRs],
                         help="Test SNR value")
     parser.add_argument("--embedding_size", type=int,
                         help="Embedding size; defaults to encoder-specific value")
@@ -90,7 +90,7 @@ if __name__ == "__main__":
     print("batch_size:", args.batch_size)
     print("num_workers:", args.num_workers)
     print("Input data:", os.path.join(config.DATA_FOLDER_PATH, f"dev/mixed_wav/{args.test_condition}/{args.test_snr}"))
-    print("Output data:", os.path.join(config.DATA_FOLDER_PATH, "dev/enhanced_wav"))
+    print("Output data:", os.path.join(config.DATA_FOLDER_PATH, f"dev/enhanced_wav/{args.visual_encoder}/{args.test_condition}/{args.test_snr}"))
 
     test(
         visual_encoder=args.visual_encoder,

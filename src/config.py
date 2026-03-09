@@ -61,12 +61,11 @@ TRAINING_UPPER_SNR = 10
 ################## TESTING CONFIGURATION #####################
 ##############################################################
 
-TEST_SNR = 0
 # TEST_CONDITION available options:
 # "one_interfering_speaker", "three_interfering_speakers", "noise_only"
 TEST_CONDITION = "noise_only"
-
+TEST_SNR = -10
 
 TEST_VISUAL_ENCODERS = ["VSRiW", "TalkNet", "Loconet", "AVHuBERT", "AVHuBERT_TalkNet_concatenate", "AVHuBERT_VSRiW_concatenate", "VSRiW_TalkNet_concatenate"]
-TEST_ALL_CONDITIONS = ["one_interfering_speaker", "three_interfering_speakers", "noise_only"]
-TEST_ALL_SNRs = ["mixed", -10, -5, 0]
+TEST_ALL_CONDITIONS = ["noise_only", "one_interfering_speaker", "three_interfering_speakers"]
+TEST_ALL_SNRs = [-10, -5, 0, "mixed"]

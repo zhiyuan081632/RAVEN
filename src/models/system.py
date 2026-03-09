@@ -107,8 +107,11 @@ class System(pl.LightningModule):
         # 保存增强后的音频
         audio_fps = batch['audio_fp']
         audio_fps = [audio_fps] if isinstance(audio_fps, str) else audio_fps
+        condition = self.test_meta.get("test_condition", "unknown")
+        snr = self.test_meta.get("test_snr", "unknown")
+        visual_encoder = self.test_meta.get("visual_encoder", "unknown")
         for i, fp in enumerate(audio_fps):
-            enhanced_fp = fp.replace("/aac/", "/enhanced_wav/").replace(".m4a", ".wav")
+            enhanced_fp = fp.replace("/aac/", f"/enhanced_wav/{visual_encoder}/{condition}/{snr}/").replace(".m4a", ".wav")
             os.makedirs(os.path.dirname(enhanced_fp), exist_ok=True)
             audio_np = clean_audio_pred[i].detach().cpu().numpy()
             sf.write(enhanced_fp, audio_np, 16000)
