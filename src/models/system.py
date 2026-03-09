@@ -125,7 +125,8 @@ class System(pl.LightningModule):
 
         print(f"AVG Test Loss: {avg_loss}, Test SISDR: {avg_sisdr}, Test SISDR Gain: {avg_sisdr_gain}, Test SNR: {avg_snr}, Test SNR Gain: {avg_snr_gain}, Test PESQ: {avg_pesq}, Test estoi: {avg_estoi}")
 
-        # 将结果写入 log 文件
+        # 将结果写入 log 文件（使用文件锁防止并发写入冲突）
+        import fcntl
         log_path = self.test_meta.get("log_path", "test_results.log")
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         with open(log_path, "a") as f:
@@ -158,10 +159,6 @@ class System(pl.LightningModule):
         if torch.cuda.is_available():
             torch.cuda.manual_seed_all(epoch_seed)
 
-    
-    
-    
-        
     def log_error(self, file_path, error_message):
         with open(self.error_log_path, "a") as f:
             f.write(f"{file_path}: {error_message}\n")

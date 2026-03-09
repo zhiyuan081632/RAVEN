@@ -31,7 +31,7 @@ def get_latest_checkpoint_path(checkpoint_dir):
 
 def train(args, train_from_checkpoint=True):
     if not os.path.exists(args.checkpoint_dir):
-        os.makedirs(args.checkpoint_dir)
+        os.makedirs(args.checkpoint_dir, exist_ok=True)
 
     datamodule = VoxCeleb2DataModule(
         data_path=config.DATA_FOLDER_PATH,

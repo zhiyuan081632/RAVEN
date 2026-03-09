@@ -37,8 +37,10 @@ python data/AVHuBERT_extract_visual_features.py
 
 # Generate test data 
 ## noise_only 
-python -W ignore data/generate_test_data.py --condition noise_only --snr="-10,-5,0"
+python -W ignore data/generate_test_data.py --condition noise_only --snr="mixed,-10,-5,0"
 
 ## one_interfering_speaker
-python -W ignore data/generate_test_data.py --condition one_interfering_speaker --snr="-10,-5,0"
+python -W ignore data/generate_test_data.py --condition one_interfering_speaker --snr="mixed,-10,-5,0"
 
+## three_interfering_speakers
+python -W ignore data/generate_test_data.py --condition three_interfering_speakers --snr="mixed,-10,-5,0"

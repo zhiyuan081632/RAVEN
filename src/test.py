@@ -53,7 +53,7 @@ def test(visual_encoder, ckpt_path, test_condition, test_snr, embedding_size, ba
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Test AV fusion model")
 
-    parser.add_argument("--visual_encoder", type=str, required=True,
+    parser.add_argument("--visual_encoder", type=str, default=config.VISUAL_ENCODER,
                         choices=config.TEST_VISUAL_ENCODERS,
                         help="Visual encoder to use")
     parser.add_argument("--ckpt_path", type=str, required=True, 
@@ -89,11 +89,8 @@ if __name__ == "__main__":
     print("embedding_size:", embedding_size)
     print("batch_size:", args.batch_size)
     print("num_workers:", args.num_workers)
-    print()
-    print("=" * 60)
     print("Input data:", os.path.join(config.DATA_FOLDER_PATH, f"dev/mixed_wav/{args.test_condition}/{args.test_snr}"))
     print("Output data:", os.path.join(config.DATA_FOLDER_PATH, "dev/enhanced_wav"))
-    print("=" * 60)
 
     test(
         visual_encoder=args.visual_encoder,
