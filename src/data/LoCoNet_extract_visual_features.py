@@ -43,8 +43,13 @@ class VideoDataset(Dataset):
         super().__init__()
         self.df = pd.read_csv(data_split_path)
         self.data_path = data_path
-        self.split= split
-        self.file_list = pd.read_csv("./data/split.csv")["audio_fp"].str.replace("/aac/", "/mp4/").str.replace(".m4a", ".mp4").tolist()
+        self.split = split
+        # 根据 split 过滤数据
+        all_data = pd.read_csv("./data/split.csv")
+        if split:
+            all_data = all_data[all_data["split"] == split]
+            print(f"Filtered by split='{split}': {len(all_data)} samples")
+        self.file_list = all_data["audio_fp"].str.replace("/aac/", "/mp4/").str.replace(".m4a", ".mp4").reset_index(drop=True).tolist()
 
 
     def __len__(self):
@@ -70,10 +75,9 @@ class TalkNetBatchedPreprocessing:
             model_path,
             data_split_path,
             data_path,
-            split,
+            split=None,
             batch_size: int = None,
             num_workers: int = 1,
-
             device = "cpu"
         ) -> None:
         super().__init__()
@@ -208,7 +212,7 @@ def main():
         model_path,
         data_split,
         DATA_FOLDER_PATH,
-        split = "test",
+        # split = "test",
         num_workers=1  # os.cpu_count() = 4 or 64
     )
     process.extract_features()

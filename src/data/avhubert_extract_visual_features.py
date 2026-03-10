@@ -45,12 +45,19 @@ class VideoDataset(Dataset):
             self, 
             data_split_path ,
             data_path,
+            split=None,
             face_track: bool = True, 
             ) -> None:
         super().__init__()
         self.df = pd.read_csv(data_split_path)
         self.data_path = data_path
-        self.file_list = pd.read_csv("./data/split.csv")["audio_fp"].str.replace("/aac/", "/mp4/").str.replace(".m4a", ".mp4")
+        self.split = split
+        # 根据 split 过滤数据
+        all_data = pd.read_csv("./data/split.csv")
+        if split:
+            all_data = all_data[all_data["split"] == split]
+            print(f"Filtered by split='{split}': {len(all_data)} samples")
+        self.file_list = all_data["audio_fp"].str.replace("/aac/", "/mp4/").str.replace(".m4a", ".mp4").reset_index(drop=True)
         self.video_processor = VideoProcess()
         self.video_transform = VideoTransform(speed_rate=1)
         self.face_track = face_track
@@ -156,13 +163,15 @@ class AVHuBERTBatchedPreprocessing:
             self,
             data_split_path,
             data_path = True,
+            split = None,
             batch_size = None,
             num_workers = 1,
             face_track: bool = True, 
             device = "cuda"
         ) -> None:
         super().__init__()
-        self.ds = VideoDataset(data_split_path, data_path, face_track=face_track)
+        self.split = split
+        self.ds = VideoDataset(data_split_path, data_path, split=split, face_track=face_track)
         self.dataloader = DataLoader(self.ds, batch_size=batch_size, num_workers=num_workers, 
                                      drop_last=False, worker_init_fn=video_dataset_worker_init,
                                      collate_fn=custom_collate)
@@ -241,6 +250,7 @@ def main():
     process = AVHuBERTBatchedPreprocessing(
         data_split,
         DATA_FOLDER_PATH,
+        split="test",
         face_track=True,
         num_workers=8,  # Further reduced from 16 to 8 to avoid OOM
         batch_size=1   # Process one video at a time
