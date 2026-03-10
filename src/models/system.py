@@ -24,15 +24,7 @@ class System(pl.LightningModule):
         self.error_files = []
         self.error_log_path = 'error_files.txt'
         self.test_meta = test_meta or {}  # 测试元信息，用于写 log
-        self.test_dict = {
-            'test_loss': [],
-            'test_pesq': [],
-            'test_sisdr': [],  
-            'test_sisdr_gain': [],
-            'test_snr': [],
-            'test_snr_gain': [],
-            'test_estoi': []
-        }
+        self.test_sample_count = 0  # 当前进程实际处理的样本数
 
 
         
@@ -96,13 +88,19 @@ class System(pl.LightningModule):
         loss, sisdr, sisdr_gain, snr, snr_gain, clean_audio_pred, clean_audio_target = self.common_step(batch, batch_idx)
         pesq = self.get_pesq(clean_audio_pred, clean_audio_target, batch)
         estoi = self.get_estoi(clean_audio_pred, clean_audio_target, batch)
-        self.test_dict["test_loss"].append(loss)
-        self.test_dict["test_snr"].append(snr)
-        self.test_dict["test_snr_gain"].append(snr_gain)
-        self.test_dict["test_pesq"].append(pesq)
-        self.test_dict["test_estoi"].append(estoi)
-        self.test_dict["test_sisdr"].append(sisdr)
-        self.test_dict["test_sisdr_gain"].append(sisdr_gain)
+        
+        # 使用 Lightning 内置的指标聚合，自动处理多 GPU 汇总
+        self.log("test/loss", loss, sync_dist=True, on_step=False, on_epoch=True)
+        self.log("test/sisdr", sisdr, sync_dist=True, on_step=False, on_epoch=True)
+        self.log("test/sisdr_gain", sisdr_gain, sync_dist=True, on_step=False, on_epoch=True)
+        self.log("test/snr", snr, sync_dist=True, on_step=False, on_epoch=True)
+        self.log("test/snr_gain", snr_gain, sync_dist=True, on_step=False, on_epoch=True)
+        self.log("test/pesq", pesq, sync_dist=True, on_step=False, on_epoch=True)
+        self.log("test/estoi", estoi, sync_dist=True, on_step=False, on_epoch=True)
+        
+        # 统计当前进程处理的样本数
+        batch_size = clean_audio_pred.shape[0] if hasattr(clean_audio_pred, 'shape') else 1
+        self.test_sample_count += batch_size
 
         # 保存增强后的音频
         audio_fps = batch['audio_fp']
@@ -119,54 +117,32 @@ class System(pl.LightningModule):
     def on_test_epoch_end(self):
         import fcntl
         
-        # 当前进程的统计量
-        num_samples = len(self.test_dict["test_loss"])
-        sum_loss = float(sum(self.test_dict["test_loss"]))
-        sum_sisdr = float(sum(self.test_dict["test_sisdr"]))
-        sum_sisdr_gain = float(sum(self.test_dict["test_sisdr_gain"]))
-        sum_snr = float(sum(self.test_dict["test_snr"]))
-        sum_snr_gain = float(sum(self.test_dict["test_snr_gain"]))
-        sum_pesq = float(sum(self.test_dict["test_pesq"]))
-        sum_estoi = float(sum(self.test_dict["test_estoi"]))
-        
-        # 多 GPU 时汇总所有进程的结果
+        # 汇总各进程的样本数用于验证
+        local_count = torch.tensor([self.test_sample_count], dtype=torch.float32, device=self.device)
         if self.trainer.world_size > 1:
-            # 汇总统计量
-            stats = torch.tensor([num_samples, sum_loss, sum_sisdr, sum_sisdr_gain, 
-                                  sum_snr, sum_snr_gain, sum_pesq, sum_estoi], 
-                                 device=self.device)
-            gathered = self.all_gather(stats)  # shape: (world_size, 8)
-            
-            # 求和
-            total_samples = int(gathered[:, 0].sum().item())
-            total_loss = gathered[:, 1].sum().item()
-            total_sisdr = gathered[:, 2].sum().item()
-            total_sisdr_gain = gathered[:, 3].sum().item()
-            total_snr = gathered[:, 4].sum().item()
-            total_snr_gain = gathered[:, 5].sum().item()
-            total_pesq = gathered[:, 6].sum().item()
-            total_estoi = gathered[:, 7].sum().item()
+            total_count = int(self.all_gather(local_count).sum().item())
         else:
-            total_samples = num_samples
-            total_loss = sum_loss
-            total_sisdr = sum_sisdr
-            total_sisdr_gain = sum_sisdr_gain
-            total_snr = sum_snr
-            total_snr_gain = sum_snr_gain
-            total_pesq = sum_pesq
-            total_estoi = sum_estoi
+            total_count = int(local_count.item())
         
-        # 计算平均值
-        avg_loss = total_loss / total_samples
-        avg_sisdr = total_sisdr / total_samples
-        avg_sisdr_gain = total_sisdr_gain / total_samples
-        avg_snr = total_snr / total_samples
-        avg_snr_gain = total_snr_gain / total_samples
-        avg_pesq = total_pesq / total_samples
-        avg_estoi = total_estoi / total_samples
+        dataset_size = len(self.trainer.test_dataloaders.dataset)
+        
+        # 从 Lightning 聚合后的指标中读取结果
+        metrics = self.trainer.callback_metrics
+        avg_loss = metrics["test/loss"].item()
+        avg_sisdr = metrics["test/sisdr"].item()
+        avg_sisdr_gain = metrics["test/sisdr_gain"].item()
+        avg_snr = metrics["test/snr"].item()
+        avg_snr_gain = metrics["test/snr_gain"].item()
+        avg_pesq = metrics["test/pesq"].item()
+        avg_estoi = metrics["test/estoi"].item()
         
         # 只由 rank 0 打印和写入日志
         if self.global_rank == 0:
+            # 打印验证信息
+            print(f"\n[Verification] dataset_size={dataset_size}, total_processed={total_count}, num_gpus={self.trainer.world_size}")
+            if total_count != dataset_size:
+                print(f"  WARNING: processed {total_count} samples but dataset has {dataset_size} (DDP padding: {total_count - dataset_size})")
+            
             print(f"AVG Test Loss: {avg_loss}, Test SISDR: {avg_sisdr}, Test SISDR Gain: {avg_sisdr_gain}, Test SNR: {avg_snr}, Test SNR Gain: {avg_snr_gain}, Test PESQ: {avg_pesq}, Test estoi: {avg_estoi}")
 
             log_path = self.test_meta.get("log_path", "test_results.log")
@@ -178,7 +154,8 @@ class System(pl.LightningModule):
                     for k, v in self.test_meta.items():
                         if k != "log_path":
                             f.write(f"  {k}: {v}\n")
-                    f.write(f"  num_samples: {total_samples}\n")
+                    f.write(f"  dataset_size: {dataset_size}\n")
+                    f.write(f"  total_processed: {total_count}\n")
                     f.write(f"  num_gpus: {self.trainer.world_size}\n")
                     f.write(f"  AVG Test Loss: {avg_loss}\n")
                     f.write(f"  Test SISDR: {avg_sisdr}, SISDR Gain: {avg_sisdr_gain}\n")
