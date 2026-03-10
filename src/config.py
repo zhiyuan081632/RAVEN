@@ -6,7 +6,7 @@ import os
 
 #TODO: replace with your own project root and data folder paths
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # RAVEN/
-DATA_FOLDER_PATH = "/mnt/e/data/VoxCeleb2"
+SPEECH_FOLDER_PATH = "/mnt/e/data/VoxCeleb2"
 MUSAN_FOLDER_PATH = "/mnt/e/data/MUSAN"
 
 ##############################################################

@@ -78,13 +78,13 @@ def main(condition, snr):
     main_df = pd.read_csv("./data/split.csv")
     subset_test_df = main_df[main_df["split"] == "test"].copy()
     subset_test_df["audio_fp"] = subset_test_df["audio_fp"].apply(
-        lambda fp: os.path.join(config.DATA_FOLDER_PATH, fp)
+        lambda fp: os.path.join(config.SPEECH_FOLDER_PATH, fp)
     )
     target_test_df = random_select_fps(main_df)
     musan_noise_test_df = musan_fps[(musan_fps["split"] == "test") & (musan_fps["type"] == "noise")]
     
     for i, target_fp in tqdm(enumerate(target_test_df)):
-        abs_target_fp = os.path.join(config.DATA_FOLDER_PATH, target_fp)
+        abs_target_fp = os.path.join(config.SPEECH_FOLDER_PATH, target_fp)
         if condition == "noise_only":
             mixed_audio = generate_noise_condition(abs_target_fp, musan_noise_test_df, snr)
         elif condition == "one_interfering_speaker":

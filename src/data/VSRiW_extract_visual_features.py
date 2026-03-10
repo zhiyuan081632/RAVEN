@@ -20,7 +20,7 @@ from mediapipe.python.solutions.face_detection import FaceDetection, FaceKeyPoin
 from pipelines.detectors.mediapipe.video_process import VideoProcess
 from pipelines.data.transforms import VideoTransform
 
-DATA_FOLDER_PATH = config.DATA_FOLDER_PATH
+SPEECH_FOLDER_PATH = config.SPEECH_FOLDER_PATH
 class VideoDataset(Dataset):
     def __init__(
             self, 
@@ -146,7 +146,7 @@ class AVSRBatchedPreprocessing:
 
     def extract_features(self):
         # 使用统一的失败记录文件（不分 train/val/test）
-        failed_text_path = os.path.join(config.DATA_FOLDER_PATH, "failed_VSRiW_frontE_feat_split.txt")
+        failed_text_path = os.path.join(config.SPEECH_FOLDER_PATH, "failed_VSRiW_frontE_feat_split.txt")
         success_count = 0
         skip_count = 0
         failure_count = 0
@@ -208,7 +208,7 @@ def main():
         model_path=model_path,
         model_conf=model_conf,
         data_split_path=data_split,
-        data_path=DATA_FOLDER_PATH,
+        data_path=SPEECH_FOLDER_PATH,
         # split="test",
         face_track=True,
         num_workers=8 # os.cpu_count() = 16 or 64

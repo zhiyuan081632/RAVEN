@@ -28,7 +28,7 @@ from torchvision.transforms import ToPILImage
 
 
 
-DATA_FOLDER_PATH = config.DATA_FOLDER_PATH
+SPEECH_FOLDER_PATH = config.SPEECH_FOLDER_PATH
 
 
 
@@ -97,7 +97,7 @@ class TalkNetBatchedPreprocessing:
 
     def extract_features(self):
         # 使用统一的失败记录文件（不分 train/val/test）
-        failed_text_path = os.path.join(config.DATA_FOLDER_PATH, "failed_Loconet_frontE_feat_split.txt")
+        failed_text_path = os.path.join(config.SPEECH_FOLDER_PATH, "failed_Loconet_frontE_feat_split.txt")
         success_count = 0
         skip_count = 0
         failure_count = 0
@@ -211,7 +211,7 @@ def main():
     process = TalkNetBatchedPreprocessing(
         model_path,
         data_split,
-        DATA_FOLDER_PATH,
+        SPEECH_FOLDER_PATH,
         # split = "test",
         num_workers=1  # os.cpu_count() = 4 or 64
     )

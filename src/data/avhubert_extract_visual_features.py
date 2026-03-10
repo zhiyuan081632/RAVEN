@@ -29,7 +29,7 @@ from mediapipe.python.solutions.face_detection import FaceDetection, FaceKeyPoin
 from pipelines.detectors.mediapipe.video_process import VideoProcess
 
 
-DATA_FOLDER_PATH = config.DATA_FOLDER_PATH
+SPEECH_FOLDER_PATH = config.SPEECH_FOLDER_PATH
 
 class VideoTransform:
     def __init__(self, speed_rate):
@@ -185,7 +185,7 @@ class AVHuBERTBatchedPreprocessing:
 
     def extract_features(self):
         # 使用统一的失败记录文件（不分 train/val/test）
-        failed_text_path = os.path.join(config.DATA_FOLDER_PATH, "failed_avhubert_frontE_feat_split.txt")
+        failed_text_path = os.path.join(config.SPEECH_FOLDER_PATH, "failed_avhubert_frontE_feat_split.txt")
         success_count = 0
         skip_count = 0
         failure_count = 0
@@ -249,7 +249,7 @@ def main():
     data_split = "./data/split.csv"
     process = AVHuBERTBatchedPreprocessing(
         data_split,
-        DATA_FOLDER_PATH,
+        SPEECH_FOLDER_PATH,
         split="test",
         face_track=True,
         num_workers=8,  # Further reduced from 16 to 8 to avoid OOM

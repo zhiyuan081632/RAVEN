@@ -19,7 +19,7 @@ def fxn():
 
 def test(visual_encoder, ckpt_path, test_condition, test_snr, embedding_size, batch_size, num_workers):
     datamodule = VoxCeleb2DataModule(
-        data_path=config.DATA_FOLDER_PATH,
+        data_path=config.SPEECH_FOLDER_PATH,
         visual_encoder=visual_encoder,
         embedding_size=embedding_size,
         batch_size=batch_size,
@@ -89,8 +89,8 @@ if __name__ == "__main__":
     print("embedding_size:", embedding_size)
     print("batch_size:", args.batch_size)
     print("num_workers:", args.num_workers)
-    print("Input data:", os.path.join(config.DATA_FOLDER_PATH, f"dev/mixed_wav/{args.test_condition}/{args.test_snr}"))
-    print("Output data:", os.path.join(config.DATA_FOLDER_PATH, f"dev/enhanced_wav/{args.visual_encoder}/{args.test_condition}/{args.test_snr}"))
+    print("Input data:", os.path.join(config.SPEECH_FOLDER_PATH, f"dev/mixed_wav/{args.test_condition}/{args.test_snr}"))
+    print("Output data:", os.path.join(config.SPEECH_FOLDER_PATH, f"dev/enhanced_wav/{args.visual_encoder}/{args.test_condition}/{args.test_snr}"))
 
     test(
         visual_encoder=args.visual_encoder,

@@ -26,7 +26,7 @@ Then run
 
 ## Data Preprocessing
 
-We use [VoxCeleb2](https://www.robots.ox.ac.uk/~vgg/data/voxceleb/vox2.html) for our training. Please download the dataset and change the `DATA_FOLDER_PATH` in `config.py` to the folder path you saved the data to. 
+We use [VoxCeleb2](https://www.robots.ox.ac.uk/~vgg/data/voxceleb/vox2.html) for our training. Please download the dataset and change the `SPEECH_FOLDER_PATH` in `config.py` to the folder path you saved the data to. 
 
 We also use [MUSAN](https://www.openslr.org/17/) for creating our noisy input mixture. Please download the dataset and change the `MUSAN_FOLDER_PATH` to the folder path you saved the MUSAN data to. 
 

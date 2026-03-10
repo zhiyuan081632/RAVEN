@@ -28,7 +28,7 @@ import config
 SPLIT = "val"
 # Input directory - set to either "dev/wav" or "dev/aac"
 INPUT_DIR = "dev/aac"  # Change this to "dev/wav" if you have wav files
-OUTPUT_DIR = os.path.join(config.DATA_FOLDER_PATH, "dev/mixed_wav")
+OUTPUT_DIR = os.path.join(config.SPEECH_FOLDER_PATH, "dev/mixed_wav")
 
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
@@ -63,14 +63,14 @@ def augment_speech(target_speaker, target_speaker_fp, voxceleb2_fps, musan_fps, 
 def get_interfering_fps(target_speaker_fp, musan_fps, voxceleb2_fps, augment_type):
     voxceleb2_fps = voxceleb2_fps[voxceleb2_fps != target_speaker_fp]
     interfering_speaker_fp = np.random.choice(voxceleb2_fps)
-    interfering_speaker_fp = os.path.join(config.DATA_FOLDER_PATH, interfering_speaker_fp)
+    interfering_speaker_fp = os.path.join(config.SPEECH_FOLDER_PATH, interfering_speaker_fp)
 
     if augment_type == "none":
         other_interference_fp = None
     elif augment_type == "speech":
         voxceleb2_fps = voxceleb2_fps[voxceleb2_fps != interfering_speaker_fp]
         other_interference_fp = np.random.choice(voxceleb2_fps)
-        other_interference_fp = os.path.join(config.DATA_FOLDER_PATH, other_interference_fp)
+        other_interference_fp = os.path.join(config.SPEECH_FOLDER_PATH, other_interference_fp)
     else:
         other_interference_fp = np.random.choice(musan_fps)
         other_interference_fp = os.path.join(config.MUSAN_FOLDER_PATH, other_interference_fp)
@@ -114,7 +114,7 @@ def process_file(file_info):
     
     os.makedirs(output_path.parent, exist_ok=True)
     
-    target_speaker_fp = os.path.join(config.DATA_FOLDER_PATH, m4a_path)
+    target_speaker_fp = os.path.join(config.SPEECH_FOLDER_PATH, m4a_path)
     target_speaker = crop_pad_audio(target_speaker_fp, 16000, 5)
 
     mixed_audio = augment_speech(target_speaker, m4a_path, voxceleb2_fps, musan_fps, config.TRAINING_LOWER_SNR, config.TRAINING_UPPER_SNR, SPLIT)
