@@ -29,13 +29,8 @@ df_others = df[~(train_mask | val_mask | test_mask)]
 # 合并回去，生成缩减版 split
 df_small = pd.concat([df_train, df_val, df_test, df_others], ignore_index=True)
 
-# 覆盖写回 split.parquet
-df_small.to_parquet("data/split_small.parquet")
-
-# 同步生成 split_small.csv，供视频特征提取脚本使用
-# 保留三列（audio_fp, video_fp, split），带标题行
-split_for_csv = df_small[df_small["split"].isin(["train", "val", "test"])]
-split_for_csv.to_csv("data/split_small.csv", index=False, header=True)
+# 生成缩减版 split_small.csv
+df_small.to_csv("data/split_small.csv", index=False, header=True)
 
 print("Extracting small data split from full data complete!")
 print("Train rows:", len(df_small[df_small["split"] == "train"]))

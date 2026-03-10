@@ -10,7 +10,7 @@ from utils.augment_visual import augment_visual
 import config as config
 
 
-SPLIT_FILE_PATH = "./data/split.parquet"
+SPLIT_FILE_PATH = "./data/split.csv"
 SAMPLING_RATE = config.SAMPLING_RATE
 
 
@@ -20,7 +20,7 @@ class VoxCeleb2(data.Dataset):
         self.split = split
         self.data_path = data_path
         if all_data is None:
-            all_data = pd.read_parquet(SPLIT_FILE_PATH)
+            all_data = pd.read_csv(SPLIT_FILE_PATH)
         musan_fps = pd.read_csv("./data/musan_split.csv")
         self.musan_fps = musan_fps[musan_fps["split"] == self.split]
         if self.split == "train":

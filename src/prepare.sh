@@ -9,11 +9,9 @@ if [ "$MODE" = "small" ]; then
     echo "使用小量数据模式"
     ##  Split small data from full data 
     python data/extract_small_data.py
-    cp data/split_small.parquet data/split.parquet
     cp data/split_small.csv data/split.csv
 elif [ "$MODE" = "full" ]; then
     echo "使用完整数据模式"
-    cp data/split_full.parquet data/split.parquet
     cp data/split_full.csv data/split.csv
 fi
 

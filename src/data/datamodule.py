@@ -4,7 +4,7 @@ from data.dataset import VoxCeleb2
 import torch
 import pandas as pd
 
-SPLIT_FILE_PATH = "./data/split.parquet"
+SPLIT_FILE_PATH = "./data/split.csv"
 
 class VoxCeleb2DataModule(pl.LightningDataModule):
 
@@ -17,7 +17,7 @@ class VoxCeleb2DataModule(pl.LightningDataModule):
         self.data_path = data_path
 
     def setup(self, test_condition, test_snr):
-        all_data = pd.read_parquet(SPLIT_FILE_PATH)
+        all_data = pd.read_csv(SPLIT_FILE_PATH)
         self.train_dataset = VoxCeleb2("train", self.data_path, self.visual_encoder, self.embedding_size, all_data)
         self.val_dataset = VoxCeleb2("val", self.data_path, self.visual_encoder, self.embedding_size, all_data)
         self.test_dataset = VoxCeleb2("test", self.data_path, self.visual_encoder, self.embedding_size, all_data, test_condition, test_snr)

@@ -32,8 +32,8 @@ OUTPUT_DIR = os.path.join(config.DATA_FOLDER_PATH, "dev/mixed_wav")
 
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-voxceleb2_split_fp = os.path.join(config.PROJECT_ROOT, "src/data/split.parquet")
-voxceleb2_fps = pd.read_parquet(voxceleb2_split_fp)
+voxceleb2_split_fp = os.path.join(config.PROJECT_ROOT, "src/data/split.csv")
+voxceleb2_fps = pd.read_csv(voxceleb2_split_fp)
 voxceleb2_fps = voxceleb2_fps[voxceleb2_fps["split"] == SPLIT]["audio_fp"]
 musan_split_fp = os.path.join(config.PROJECT_ROOT, "src/data/musan_split.csv")
 musan_fps = pd.read_csv(musan_split_fp)
