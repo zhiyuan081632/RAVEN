@@ -117,31 +117,76 @@ class System(pl.LightningModule):
             sf.write(enhanced_fp, audio_np, 16000)
 
     def on_test_epoch_end(self):
-        avg_loss = sum(self.test_dict["test_loss"]) / len(self.test_dict["test_loss"])
-        avg_sisdr = sum(self.test_dict["test_sisdr"]) / len(self.test_dict["test_sisdr"])
-        avg_sisdr_gain = sum(self.test_dict["test_sisdr_gain"]) / len(self.test_dict["test_sisdr_gain"])
-        avg_snr = sum(self.test_dict["test_snr"]) / len(self.test_dict["test_snr"])
-        avg_snr_gain = sum(self.test_dict["test_snr_gain"]) / len(self.test_dict["test_snr_gain"])
-        avg_pesq = sum(self.test_dict["test_pesq"]) / len(self.test_dict["test_pesq"])
-        avg_estoi = sum(self.test_dict["test_estoi"]) / len(self.test_dict["test_estoi"])
-        
-
-        print(f"AVG Test Loss: {avg_loss}, Test SISDR: {avg_sisdr}, Test SISDR Gain: {avg_sisdr_gain}, Test SNR: {avg_snr}, Test SNR Gain: {avg_snr_gain}, Test PESQ: {avg_pesq}, Test estoi: {avg_estoi}")
-
-        # 将结果写入 log 文件（使用文件锁防止并发写入冲突）
         import fcntl
-        log_path = self.test_meta.get("log_path", "test_results.log")
-        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        with open(log_path, "a") as f:
-            f.write(f"\n[{timestamp}]\n")
-            for k, v in self.test_meta.items():
-                if k != "log_path":
-                    f.write(f"  {k}: {v}\n")
-            f.write(f"  AVG Test Loss: {avg_loss}\n")
-            f.write(f"  Test SISDR: {avg_sisdr}, SISDR Gain: {avg_sisdr_gain}\n")
-            f.write(f"  Test SNR: {avg_snr}, SNR Gain: {avg_snr_gain}\n")
-            f.write(f"  Test PESQ: {avg_pesq}\n")
-            f.write(f"  Test estoi: {avg_estoi}\n")
+        
+        # 当前进程的统计量
+        num_samples = len(self.test_dict["test_loss"])
+        sum_loss = float(sum(self.test_dict["test_loss"]))
+        sum_sisdr = float(sum(self.test_dict["test_sisdr"]))
+        sum_sisdr_gain = float(sum(self.test_dict["test_sisdr_gain"]))
+        sum_snr = float(sum(self.test_dict["test_snr"]))
+        sum_snr_gain = float(sum(self.test_dict["test_snr_gain"]))
+        sum_pesq = float(sum(self.test_dict["test_pesq"]))
+        sum_estoi = float(sum(self.test_dict["test_estoi"]))
+        
+        # 多 GPU 时汇总所有进程的结果
+        if self.trainer.world_size > 1:
+            # 汇总统计量
+            stats = torch.tensor([num_samples, sum_loss, sum_sisdr, sum_sisdr_gain, 
+                                  sum_snr, sum_snr_gain, sum_pesq, sum_estoi], 
+                                 device=self.device)
+            gathered = self.all_gather(stats)  # shape: (world_size, 8)
+            
+            # 求和
+            total_samples = int(gathered[:, 0].sum().item())
+            total_loss = gathered[:, 1].sum().item()
+            total_sisdr = gathered[:, 2].sum().item()
+            total_sisdr_gain = gathered[:, 3].sum().item()
+            total_snr = gathered[:, 4].sum().item()
+            total_snr_gain = gathered[:, 5].sum().item()
+            total_pesq = gathered[:, 6].sum().item()
+            total_estoi = gathered[:, 7].sum().item()
+        else:
+            total_samples = num_samples
+            total_loss = sum_loss
+            total_sisdr = sum_sisdr
+            total_sisdr_gain = sum_sisdr_gain
+            total_snr = sum_snr
+            total_snr_gain = sum_snr_gain
+            total_pesq = sum_pesq
+            total_estoi = sum_estoi
+        
+        # 计算平均值
+        avg_loss = total_loss / total_samples
+        avg_sisdr = total_sisdr / total_samples
+        avg_sisdr_gain = total_sisdr_gain / total_samples
+        avg_snr = total_snr / total_samples
+        avg_snr_gain = total_snr_gain / total_samples
+        avg_pesq = total_pesq / total_samples
+        avg_estoi = total_estoi / total_samples
+        
+        # 只由 rank 0 打印和写入日志
+        if self.global_rank == 0:
+            print(f"AVG Test Loss: {avg_loss}, Test SISDR: {avg_sisdr}, Test SISDR Gain: {avg_sisdr_gain}, Test SNR: {avg_snr}, Test SNR Gain: {avg_snr_gain}, Test PESQ: {avg_pesq}, Test estoi: {avg_estoi}")
+
+            log_path = self.test_meta.get("log_path", "test_results.log")
+            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            with open(log_path, "a") as f:
+                fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+                try:
+                    f.write(f"\n[{timestamp}]\n")
+                    for k, v in self.test_meta.items():
+                        if k != "log_path":
+                            f.write(f"  {k}: {v}\n")
+                    f.write(f"  num_samples: {total_samples}\n")
+                    f.write(f"  num_gpus: {self.trainer.world_size}\n")
+                    f.write(f"  AVG Test Loss: {avg_loss}\n")
+                    f.write(f"  Test SISDR: {avg_sisdr}, SISDR Gain: {avg_sisdr_gain}\n")
+                    f.write(f"  Test SNR: {avg_snr}, SNR Gain: {avg_snr_gain}\n")
+                    f.write(f"  Test PESQ: {avg_pesq}\n")
+                    f.write(f"  Test estoi: {avg_estoi}\n")
+                finally:
+                    fcntl.flock(f.fileno(), fcntl.LOCK_UN)
 
         return avg_loss, avg_pesq, avg_sisdr, avg_sisdr_gain, avg_snr, avg_snr_gain, avg_estoi
     

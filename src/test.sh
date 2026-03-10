@@ -2,7 +2,7 @@
 
 # 测试条件
 test_conditions=("noise_only" "one_interfering_speaker" "three_interfering_speakers")
-test_snrs=("-10" "-5" "0" "mixed")
+test_snrs=("-10" "-5" "0")
 
 # 模型路径
 visual_encoder="VSRiW_TalkNet_concatenate"
