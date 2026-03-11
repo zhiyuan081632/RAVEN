@@ -1,6 +1,6 @@
 
-# Convert full data from mp4 to ma4c/wav
-# ./data/convert_vox2_mp4.sh
+# Convert mp4 file to ma4c/wav
+# ./data/convert_mp4_to_wav.sh
 
 # 配置开关: "small" 或 "full"
 MODE="small"
@@ -24,13 +24,13 @@ python -W ignore utils/mix_speech_gpu.py
 python data/VSRiW_extract_visual_features.py --speech_dataset VoxCeleb2 --split train
 
 ## TalkNet
-python data/TalkNet_extract_visual_features.py
+python data/TalkNet_extract_visual_features.py --speech_dataset VoxCeleb2 --split train
 
 ## LoCoNet
-python data/LoCoNet_extract_visual_features.py
+python data/LoCoNet_extract_visual_features.py --speech_dataset VoxCeleb2 --split train
 
 # AVHuBERT
-python data/AVHuBERT_extract_visual_features.py
+python data/AVHuBERT_extract_visual_features.py --speech_dataset VoxCeleb2 --split train
 
 
 # Generate test data 

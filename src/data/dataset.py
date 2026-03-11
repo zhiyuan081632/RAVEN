@@ -5,6 +5,7 @@ from torch.utils import data
 import pandas as pd
 import librosa
 import hashlib
+import random
 from utils.utils import crop_pad_audio
 from utils.augment_visual import augment_visual
 import config as config
@@ -21,6 +22,20 @@ class VoxCeleb2(data.Dataset):
         self.data_path = data_path
         if all_data is None:
             all_data = pd.read_csv(SPLIT_FILE_PATH)
+        
+        # 根据 dataset 列确定数据集名称
+        if "dataset" in all_data.columns:
+            datasets = all_data["dataset"].unique()
+            if len(datasets) == 1:
+                self.dataset_name = datasets[0]
+            else:
+                # 多个数据集混合时，默认使用第一个
+                self.dataset_name = datasets[0]
+                print(f"Warning: Multiple datasets found {datasets}, using '{self.dataset_name}'")
+        else:
+            # 兼容旧格式，默认为 VoxCeleb2
+            self.dataset_name = "VoxCeleb2"
+        
         musan_fps = pd.read_csv("./data/musan_split.csv")
         self.musan_fps = musan_fps[musan_fps["split"] == self.split]
         if self.split == "train":
@@ -28,12 +43,30 @@ class VoxCeleb2(data.Dataset):
             # 过滤失败样本
             self._filter_failed_samples(visual_encoder, data_path)
         elif self.split == "val":
-            self.data = pd.read_csv("./data/VoxCeleb2_val_1000_fps.txt", header=None)[0]
+            # 对于非 VoxCeleb2 数据集，从 split.csv 动态采样
+            if self.dataset_name != "VoxCeleb2":
+                val_data = all_data[all_data["split"] == "val"]
+                # 取前1000个（完全确定性，保证可复现）
+                if len(val_data) > 1000:
+                    val_data = val_data.head(1000)
+                self.data = val_data["audio_fp"].reset_index(drop=True)
+            else:
+                # VoxCeleb2 保持原有逻辑
+                self.data = pd.read_csv("./data/VoxCeleb2_val_1000_fps.txt", header=None)[0]
             # val 也需要过滤失败样本
             self._filter_failed_samples(visual_encoder, data_path)
         
         elif self.split == "test":
-            self.data = pd.read_csv("./data/VoxCeleb2_test_1000_fps.txt", header=None)[0]
+            # 对于非 VoxCebeb2 数据集，从 split.csv 动态采样
+            if self.dataset_name != "VoxCeleb2":
+                test_data = all_data[all_data["split"] == "test"]
+                # 取前1000个（完全确定性，保证可复现）
+                if len(test_data) > 1000:
+                    test_data = test_data.head(1000)
+                self.data = test_data["audio_fp"].reset_index(drop=True)
+            else:
+                # VoxCeleb2 保持原有逻辑
+                self.data = pd.read_csv("./data/VoxCeleb2_test_1000_fps.txt", header=None)[0]
             self.condition = condition
             self.snr = snr
             # test 也需要过滤失败样本
@@ -64,14 +97,32 @@ class VoxCeleb2(data.Dataset):
         return len(self.data)
     
     def __getitem__(self, idx):
-        audio_fp = os.path.join(self.data_path, self.data.iloc[idx])
-        mixed_audio_fp = audio_fp.replace("/aac/", "/mixed_wav/").replace(".m4a", ".wav")
+        audio_fp_raw = self.data.iloc[idx]
+        
+        # 根据数据集名称构建正确的音频路径
+        if self.dataset_name == "VoxCeleb2" or self.dataset_name == "":
+            # VoxCeleb2 格式: audio_fp 是相对路径，如 dev/aac/id00012/xxx.m4a
+            audio_fp = os.path.join(self.data_path, audio_fp_raw)
+            mixed_audio_fp = audio_fp.replace("/aac/", "/mixed_wav/").replace(".m4a", ".wav")
+        else:
+            # 其他数据集（包括 ChineseLips）: audio_fp 是相对路径，如 train/wav/xxx.wav
+            audio_fp = os.path.join(self.data_path, audio_fp_raw)
+            # mixed 音频路径: train/mixed_wav/xxx.wav
+            mixed_audio_fp = audio_fp.replace("/wav/", "/mixed_wav/").replace(".wav", ".wav")
+        
         # get raw target audio
         audio = crop_pad_audio(audio_fp, SAMPLING_RATE, 5)
         input_audio = librosa.util.normalize(audio)
         
         if self.split == "test":
-            mixed_audio_fp = mixed_audio_fp.replace("/mixed_wav/", f"/mixed_wav/{self.condition}/{self.snr}/")
+            # 根据数据集构建测试 mixed 音频路径
+            if self.dataset_name == "VoxCeleb2" or self.dataset_name == "":
+                mixed_audio_fp = mixed_audio_fp.replace("/mixed_wav/", f"/mixed_wav/{self.condition}/{self.snr}/")
+            else:
+                # 其他数据集（包括 ChineseLips）: test/mixed_wav/{condition}/{snr}/
+                base_dir = os.path.dirname(audio_fp_raw)  # 如: test/wav
+                split_name = base_dir.split("/")[0]       # 如: test
+                mixed_audio_fp = audio_fp.replace("/wav/", f"/mixed_wav/{self.condition}/{self.snr}/")
             mixed_audio = crop_pad_audio(mixed_audio_fp, SAMPLING_RATE, 5)
 
         else:
@@ -92,9 +143,15 @@ class VoxCeleb2(data.Dataset):
                 face_embed = self._concatenate_embeddings(audio_fp, self.visual_encoder)
             
         else:
-            fe_fp = audio_fp.replace("/aac/", self.embedding_path_dict[self.visual_encoder]).replace(".m4a", ".npy")
+            # 根据数据集动态构建特征文件路径
+            if self.dataset_name == "VoxCeleb2" or self.dataset_name == "":
+                # VoxCeleb2 格式: /aac/ -> 特征目录
+                fe_fp = audio_fp.replace("/aac/", self.embedding_path_dict[self.visual_encoder]).replace(".m4a", ".npy")
+            else:
+                # 其他数据集（包括 ChineseLips）: /wav/ -> 特征目录
+                fe_fp = audio_fp.replace("/wav/", self.embedding_path_dict[self.visual_encoder]).replace(".wav", ".npy")
             try:
-                face_embed = np.load(fe_fp, mmap_mode="r")
+                face_embed = np.load(fe_fp, mmap_mode="r", allow_pickle=True)
                 # crop and pad face embeddings to 5 seconds
                 face_embed = self._crop_pad_face_embeddings(face_embed)
                 face_embed = torch.tensor(face_embed)
@@ -117,8 +174,16 @@ class VoxCeleb2(data.Dataset):
 
     def _concatenate_embeddings(self, audio_fp, combined_features):
         fe1, fe2 = combined_features.split("_")[0], combined_features.split("_")[1]
-        fe_fp1 = audio_fp.replace("/aac/", self.embedding_path_dict[fe1]).replace(".m4a", ".npy")
-        fe_fp2 = audio_fp.replace("/aac/", self.embedding_path_dict[fe2]).replace(".m4a", ".npy")
+            
+        # 根据数据集动态构建特征文件路径
+        if self.dataset_name == "VoxCeleb2" or self.dataset_name == "":
+            # VoxCeleb2 格式: /aac/ -> 特征目录
+            fe_fp1 = audio_fp.replace("/aac/", self.embedding_path_dict[fe1]).replace(".m4a", ".npy")
+            fe_fp2 = audio_fp.replace("/aac/", self.embedding_path_dict[fe2]).replace(".m4a", ".npy")
+        else:
+            # 其他数据集（包括 ChineseLips）: /wav/ -> 特征目录
+            fe_fp1 = audio_fp.replace("/wav/", self.embedding_path_dict[fe1]).replace(".wav", ".npy")
+            fe_fp2 = audio_fp.replace("/wav/", self.embedding_path_dict[fe2]).replace(".wav", ".npy")
 
         # 使用各编码器的真实维度
         dim1 = self.encoder_dim_dict.get(fe1, 512)
@@ -126,14 +191,14 @@ class VoxCeleb2(data.Dataset):
         
         # 分别加载每个编码器的 embedding
         try:
-            embed1 = np.load(fe_fp1, mmap_mode="r")
+            embed1 = np.load(fe_fp1, mmap_mode="r", allow_pickle=True)
             embed1 = self._crop_pad_face_embeddings(embed1)
         except (FileNotFoundError, OSError, ValueError) as e:
             print(f"Warning: Failed to load {fe_fp1}, using zeros ({dim1}d). Error: {e}")
             embed1 = np.zeros((125, dim1), dtype=np.float32)
 
         try:
-            embed2 = np.load(fe_fp2, mmap_mode="r")
+            embed2 = np.load(fe_fp2, mmap_mode="r", allow_pickle=True)
             embed2 = self._crop_pad_face_embeddings(embed2)
         except (FileNotFoundError, OSError, ValueError) as e:
             print(f"Warning: Failed to load {fe_fp2}, using zeros ({dim2}d). Error: {e}")
@@ -169,10 +234,16 @@ class VoxCeleb2(data.Dataset):
                 print(f"    Failed file has {len(failed_raw)} entries")
                 if len(failed_raw) > 0:
                     print(f"    Sample failed path (raw): {failed_raw.iloc[0]}")
-                # 将 failed 路径转为相对路径并转换为 aac 格式
+                # 将 failed 路径转为相对路径并根据数据集转换格式
                 failed = failed_raw.str.strip()
                 failed = failed.str.replace(data_path + "/", "", regex=False)
-                failed = failed.str.replace("/mp4/", "/aac/").str.replace(".mp4", ".m4a")
+                
+                if self.dataset_name == "VoxCeleb2" or self.dataset_name == "":
+                    # VoxCeleb2 格式: mp4 -> aac, .mp4 -> .m4a
+                    failed = failed.str.replace("/mp4/", "/aac/").str.replace(".mp4", ".m4a")
+                else:
+                    # 其他数据集（包括 ChineseLips）: mp4 -> wav, .mp4 -> .wav
+                    failed = failed.str.replace("/mp4/", "/wav/").str.replace(".mp4", ".wav")
                 if len(failed) > 0:
                     print(f"    Sample failed path (converted): {failed.iloc[0]}")
                 before_count = len(self.data)

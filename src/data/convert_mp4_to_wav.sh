@@ -1,6 +1,6 @@
 #!/bin/bash
-# LRS2 Audio Extraction Script
-# This script extracts audio from LRS2 video files
+# Audio Extraction Script
+# This script extracts audio from MP4 video files
 
 # Save original terminal settings
 ORIG_STTY=$(stty -g 2>/dev/null)
@@ -30,7 +30,7 @@ SAMPLE_RATE=16000
 NUM_WORKERS=16
 
 echo "=========================================="
-echo "VoxCeleb2 Audio Extraction ($OUTPUT_FORMAT)"
+echo "Audio Extraction ($OUTPUT_FORMAT)"
 echo "========================================="
 echo "Input:  $INPUT_DIR"
 echo "Output: $OUTPUT_DIR"
@@ -49,7 +49,7 @@ fi
 mkdir -p "$OUTPUT_DIR"
 
 # Run Python script
-python data/preprocess_vox2_audio.py \
+python data/preprocess_audio.py \
     --input_dir "$INPUT_DIR" \
     --output_dir "$OUTPUT_DIR" \
     --sample_rate $SAMPLE_RATE \

@@ -3,13 +3,14 @@ import requests
 from tqdm import tqdm
 import tarfile
 import zipfile
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import threading
  
 # 下载GRID_Dataset数据集的URL
 BASE_URL = "https://spandh.dcs.shef.ac.uk/gridcorpus/"
  
-# 保存文件的本地路径
-SAVE_DIR = "/mnt/e/data/GRID/zip/" # 原始目录
-UNZIP_DIR = "/mnt/e/data/GRID/unzip/"  # 解压目录
+SAVE_DIR = "/mnt/d/data/GRID/zip/" # 下载保存目录
+UNZIP_DIR = "/mnt/d/data/GRID/unzip/" # 解压目录
 
 # 检查目录是否存在，如果不存在，则创建该目录
 if not os.path.exists(SAVE_DIR):
@@ -26,7 +27,8 @@ def extract_archive(archive_path, extract_to):
     
     # 获取相对于SAVE_DIR的路径，用于在UNZIP_DIR中保持相同结构
     rel_path = os.path.relpath(os.path.dirname(archive_path), SAVE_DIR)
-    final_extract_path = os.path.join(extract_to, rel_path)
+    # final_extract_path = os.path.join(extract_to, rel_path)
+    final_extract_path = extract_to
     
     # 创建解压目标目录
     os.makedirs(final_extract_path, exist_ok=True)
@@ -51,7 +53,7 @@ def extract_archive(archive_path, extract_to):
         print(f"解压 {archive_path} 时出错: {e}")
 
 
-def download_file(url, save_path_time):
+def download_file(url, save_path):
     """下载文件并显示进度条"""
     # 检查文件是否已经存在
     if os.path.exists(save_path):
@@ -62,8 +64,8 @@ def download_file(url, save_path_time):
         response.raise_for_status()  # 检查请求是否成功
         total_size = int(response.headers.get('content-length', 0))
 
-        with open(save_path_time, 'wb') as file, tqdm(
-                desc=os.path.basename(save_path_time),
+        with open(save_path, 'wb') as file, tqdm(
+                desc=os.path.basename(save_path),
                 total=total_size,
                 unit='iB',
                 unit_scale=True,
@@ -77,6 +79,16 @@ def download_file(url, save_path_time):
         print(f"下载 {url} 时出错: {e}")
 
 
+# 线程安全的进度条锁
+progress_lock = threading.Lock()
+
+def extract_archive_safe(archive_path, extract_to):
+    """线程安全的解压函数"""
+    extract_archive(archive_path, extract_to)
+    with progress_lock:
+        print(f"[{threading.current_thread().name}] 完成解压: {os.path.basename(archive_path)}")
+
+# 主循环 - 并发解压
 for i in range(1, 35):
     if i == 21:
         continue  # 跳过第21个说话者
@@ -90,19 +102,29 @@ for i in range(1, 35):
     # 保存文件的路径
     save_paths = [SAVE_DIR + video1, SAVE_DIR + video2, SAVE_DIR + txt_label]
 
-    # 开始批量下载
-    for file_path, save_path in zip(file_paths, save_paths):
-        # 创建保存文件的目录（如果不存在）
-        os.makedirs(os.path.dirname(save_path), exist_ok=True)
-        # 下载文件
-        download_file(file_path, save_path)
+    # # 开始批量下载（保持串行）
+    # for file_path, save_path in zip(file_paths, save_paths):
+    #     # 创建保存文件的目录（如果不存在）
+    #     os.makedirs(os.path.dirname(save_path), exist_ok=True)
+    #     # 下载文件
+    #     download_file(file_path, save_path)
 
-    print(f"{i}号文件下载完成！")
+    # print(f"{i}号文件下载完成！")
     
-    # 下载完成后自动解压所有文件
-    print(f"\n开始解压 s{i} 的文件...")
-    for save_path in save_paths:
-        extract_archive(save_path, UNZIP_DIR)
+    # 并发解压所有文件
+    print(f"\n开始并发解压 s{i} 的文件...")
+    with ThreadPoolExecutor(max_workers=10, thread_name_prefix="Extract") as executor:
+        futures = [
+            executor.submit(extract_archive_safe, save_path, UNZIP_DIR) 
+            for save_path in save_paths
+        ]
+        # 等待所有解压任务完成
+        for future in as_completed(futures):
+            try:
+                future.result()  # 获取异常
+            except Exception as e:
+                print(f"解压出错: {e}")
+    
     print(f"s{i} 所有文件解压完成！\n")
 
 print("\n" + "="*60)

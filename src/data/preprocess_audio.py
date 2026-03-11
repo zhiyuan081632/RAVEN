@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Batch extract audio from VoxCeleb2 MP4 files to WAV/M4A, preserving directory structure.
+Batch extract audio from MP4 files to WAV/M4A, preserving directory structure.
 
 - Input root:  /mnt/e/data/VoxCeleb2/dev/mp4
 - Output root: /mnt/e/data/VoxCeleb2/dev/wav or /mnt/e/data/VoxCeleb2/dev/aac
