@@ -6,7 +6,20 @@ import os
 
 #TODO: replace with your own project root and data folder paths
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # RAVEN/
-SPEECH_FOLDER_PATH = "/mnt/e/data/VoxCeleb2"
+
+# 支持多个语音数据集字典
+# 格式: {数据集名: 数据路径}
+SPEECH_DATASETS = {
+    "VoxCeleb2": "/mnt/e/data/VoxCeleb2",
+    "ChineseLips": "/mnt/e/data/ChineseLips",
+    # 可在此添加更多数据集，如:
+    # "LRS3": "/mnt/e/data/LRS3",
+}
+
+# 默认使用的数据集
+DEFAULT_SPEECH_DATASET = "ChineseLips"
+SPEECH_FOLDER_PATH = SPEECH_DATASETS[DEFAULT_SPEECH_DATASET]
+
 MUSAN_FOLDER_PATH = "/mnt/e/data/MUSAN"
 
 ##############################################################
@@ -26,7 +39,7 @@ embedding_size_dict = {
     
 }
 
-VISUAL_ENCODER = "AVHuBERT_VSRiW_concatenate"
+VISUAL_ENCODER = "VSRiW_TalkNet_concatenate"
 EMBEDDING_SIZE = embedding_size_dict[VISUAL_ENCODER]
 
 AVHUBERT_PATH = os.path.join(PROJECT_ROOT, "av_hubert/avhubert")
@@ -45,7 +58,7 @@ P = 0.3
 ##############################################################
 
 
-DATE="042925"
+DATE="20260311"
 VERSION_NAME = f"{VISUAL_ENCODER}_5layer_{DATE}"
 CHECKPOINT_DIR = os.path.join(PROJECT_ROOT, f"src/checkpoints/{VERSION_NAME}")
 

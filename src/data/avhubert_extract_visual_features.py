@@ -46,18 +46,22 @@ class VideoDataset(Dataset):
             data_split_path ,
             data_path,
             split=None,
+            dataset=None,
             face_track: bool = True, 
             ) -> None:
         super().__init__()
-        self.df = pd.read_csv(data_split_path)
         self.data_path = data_path
         self.split = split
-        # 根据 split 过滤数据
-        all_data = pd.read_csv("./data/split.csv")
+        self.dataset = dataset
+        # 根据 split 和 dataset 过滤数据
+        self.df = pd.read_csv(data_split_path)
         if split:
             all_data = all_data[all_data["split"] == split]
-            print(f"Filtered by split='{split}': {len(all_data)} samples")
-        self.file_list = all_data["audio_fp"].str.replace("/aac/", "/mp4/").str.replace(".m4a", ".mp4").reset_index(drop=True)
+        if dataset:
+            all_data = all_data[all_data["dataset"] == dataset]
+            print(f"Filtered by split='{split}', dataset='{dataset}': {len(all_data)} samples")
+        # 使用 video_fp 列，避免 aac/wav 路径差异
+        self.file_list = all_data["video_fp"].reset_index(drop=True)
         self.video_processor = VideoProcess()
         self.video_transform = VideoTransform(speed_rate=1)
         self.face_track = face_track
@@ -164,6 +168,7 @@ class AVHuBERTBatchedPreprocessing:
             data_split_path,
             data_path = True,
             split = None,
+            dataset = None,
             batch_size = None,
             num_workers = 1,
             face_track: bool = True, 
@@ -171,7 +176,8 @@ class AVHuBERTBatchedPreprocessing:
         ) -> None:
         super().__init__()
         self.split = split
-        self.ds = VideoDataset(data_split_path, data_path, split=split, face_track=face_track)
+        self.dataset = dataset
+        self.ds = VideoDataset(data_split_path, data_path, split=split, dataset=dataset, face_track=face_track)
         self.dataloader = DataLoader(self.ds, batch_size=batch_size, num_workers=num_workers, 
                                      drop_last=False, worker_init_fn=video_dataset_worker_init,
                                      collate_fn=custom_collate)
@@ -246,11 +252,23 @@ class AVHuBERTBatchedPreprocessing:
                 
 
 def main():
+    import argparse
+    parser = argparse.ArgumentParser(description="Extract AVHuBERT visual features")
+    parser.add_argument("--speech_dataset", type=str, default="VoxCeleb2",
+                        help="Speech dataset to process")
+    parser.add_argument("--split", type=str, default="",
+                        help="Split to process: train, val, test")
+    args = parser.parse_args()
+    
     data_split = "./data/split.csv"
+    data_path = config.SPEECH_DATASETS.get(args.speech_dataset, config.SPEECH_FOLDER_PATH)
+    print(f"Using dataset: {args.speech_dataset} -> {data_path}")
+    
     process = AVHuBERTBatchedPreprocessing(
         data_split,
-        SPEECH_FOLDER_PATH,
-        split="test",
+        data_path,
+        split=args.split,
+        dataset=args.speech_dataset,
         face_track=True,
         num_workers=8,  # Further reduced from 16 to 8 to avoid OOM
         batch_size=1   # Process one video at a time

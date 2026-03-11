@@ -1,5 +1,6 @@
 import sys
 import os
+import argparse
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import pandas as pd
@@ -73,18 +74,22 @@ def generate_three_interfering_speakers_condition(target_fp, subset_test_df, snr
 
 
 
-def main(condition, snr):
+def main(condition, snr, speech_dataset):
+    # 根据数据集获取路径
+    speech_folder_path = config.SPEECH_DATASETS.get(speech_dataset, config.SPEECH_FOLDER_PATH)
+    print(f"Using dataset: {speech_dataset} -> {speech_folder_path}")
+    
     musan_fps = pd.read_csv("./data/musan_split.csv")
     main_df = pd.read_csv("./data/split.csv")
     subset_test_df = main_df[main_df["split"] == "test"].copy()
     subset_test_df["audio_fp"] = subset_test_df["audio_fp"].apply(
-        lambda fp: os.path.join(config.SPEECH_FOLDER_PATH, fp)
+        lambda fp: os.path.join(speech_folder_path, fp)
     )
     target_test_df = random_select_fps(main_df)
     musan_noise_test_df = musan_fps[(musan_fps["split"] == "test") & (musan_fps["type"] == "noise")]
     
     for i, target_fp in tqdm(enumerate(target_test_df)):
-        abs_target_fp = os.path.join(config.SPEECH_FOLDER_PATH, target_fp)
+        abs_target_fp = os.path.join(speech_folder_path, target_fp)
         if condition == "noise_only":
             mixed_audio = generate_noise_condition(abs_target_fp, musan_noise_test_df, snr)
         elif condition == "one_interfering_speaker":
@@ -123,6 +128,9 @@ import argparse
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Generate test data under various conditions.")
+    parser.add_argument("--speech_dataset", type=str, default=config.DEFAULT_SPEECH_DATASET,
+                        choices=list(config.SPEECH_DATASETS.keys()),
+                        help="Speech dataset to use")
     parser.add_argument("--condition", type=str, required=True,
                         help='Condition(s), comma-separated if multiple: noise_only,one_interfering_speaker')
     parser.add_argument("--snr", type=str, required=True,
@@ -137,4 +145,4 @@ if __name__ == "__main__":
     for condition in conditions:
         for snr in snrs:
             print(f"Running condition: {condition}, SNR: {snr}")
-            main(condition, snr)
+            main(condition, snr, args.speech_dataset)

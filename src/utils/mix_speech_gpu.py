@@ -1,6 +1,7 @@
 import random
 import sys
 import os
+import argparse
 
 import soundfile as sf
 
@@ -24,17 +25,40 @@ import librosa
 from concurrent.futures import ProcessPoolExecutor
 import config
 
+
+# Default speech dataset: VoxCeleb2、 ChineseLips 
+DEFAULT_DATASET = "ChineseLips"
 # Change SPLIT to "train" or "val" or "test" to process the corresponding dataset
-SPLIT = "val"
-# Input directory - set to either "dev/wav" or "dev/aac"
-INPUT_DIR = "dev/aac"  # Change this to "dev/wav" if you have wav files
-OUTPUT_DIR = os.path.join(config.SPEECH_FOLDER_PATH, "dev/mixed_wav")
+SPLIT = "train"
+
+
+if DEFAULT_DATASET == "VoxCeleb2":
+    # Input directory - set to either "dev/wav" or "dev/aac"
+    # Change this to "dev/wav" if you have wav files
+    if SPLIT == "train" or SPLIT == "val":
+        INPUT_DIR = "dev/aac"  
+    else:
+        INPUT_DIR = "test/aac"
+else:
+    INPUT_DIR = SPLIT + "/wav"
+
+def get_output_dir(speech_dataset):
+    """Get output directory based on speech dataset."""
+    dataset_path = config.SPEECH_DATASETS.get(speech_dataset, config.SPEECH_FOLDER_PATH)
+    if speech_dataset == "VoxCeleb2":
+        return os.path.join(dataset_path, "dev/mixed_wav")
+    else:
+        # ChineseLips: output goes to {split}/mixed_wav
+        return os.path.join(dataset_path, SPLIT, "mixed_wav")
+
+OUTPUT_DIR = get_output_dir(DEFAULT_DATASET)
 
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 voxceleb2_split_fp = os.path.join(config.PROJECT_ROOT, "src/data/split.csv")
 voxceleb2_fps = pd.read_csv(voxceleb2_split_fp)
-voxceleb2_fps = voxceleb2_fps[voxceleb2_fps["split"] == SPLIT]["audio_fp"]
+# Filter by both split and dataset
+voxceleb2_fps = voxceleb2_fps[(voxceleb2_fps["split"] == SPLIT) & (voxceleb2_fps["dataset"] == DEFAULT_DATASET)]["audio_fp"]
 musan_split_fp = os.path.join(config.PROJECT_ROOT, "src/data/musan_split.csv")
 musan_fps = pd.read_csv(musan_split_fp)
 
@@ -149,6 +173,15 @@ def main():
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Mix speech with noise for training/validation")
+    parser.add_argument("--speech_dataset", type=str, default=DEFAULT_DATASET,
+                        choices=list(config.SPEECH_DATASETS.keys()),
+                        help="Speech dataset to process")
+    args = parser.parse_args()
+    
+    OUTPUT_DIR = get_output_dir(args.speech_dataset)
+    print(f"Using dataset: {args.speech_dataset} -> {OUTPUT_DIR}")
+    
     torch.multiprocessing.set_start_method('spawn', force=True) 
     os.environ["GLOG_minloglevel"] = "3"
     main()

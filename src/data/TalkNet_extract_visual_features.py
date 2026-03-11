@@ -31,17 +31,21 @@ class VideoDataset(Dataset):
             data_split_path ,
             data_path,
             split=None,
+            dataset=None,
             ) :
         super().__init__()
-        self.df = pd.read_csv(data_split_path)
         self.data_path = data_path
         self.split = split
-        # 根据 split 过滤数据
-        all_data = pd.read_csv("./data/split.csv")
+        self.dataset = dataset
+        # 根据 split 和 dataset 过滤数据
+        all_data = pd.read_csv(data_split_path)
         if split:
             all_data = all_data[all_data["split"] == split]
-            print(f"Filtered by split='{split}': {len(all_data)} samples")
-        self.file_list = all_data["audio_fp"].str.replace("/aac/", "/mp4/").str.replace(".m4a", ".mp4").reset_index(drop=True).tolist()
+        if dataset:
+            all_data = all_data[all_data["dataset"] == dataset]
+            print(f"Filtered by split='{split}', dataset='{dataset}': {len(all_data)} samples")
+        # 使用 video_fp 列，避免 aac/wav 路径差异
+        self.file_list = all_data["video_fp"].reset_index(drop=True).tolist()
 
 
     def __len__(self):
@@ -68,6 +72,7 @@ class TalkNetBatchedPreprocessing:
             data_split_path,
             data_path,
             split,
+            dataset=None,
             batch_size: int = None,
             num_workers: int = 1,
 
@@ -75,7 +80,8 @@ class TalkNetBatchedPreprocessing:
         ) -> None:
         super().__init__()
         self.split = split
-        self.ds = VideoDataset(data_split_path, data_path, split = self.split)
+        self.dataset = dataset
+        self.ds = VideoDataset(data_split_path, data_path, split = self.split, dataset=self.dataset)
         self.dataloader = DataLoader(self.ds, batch_size=batch_size, num_workers=num_workers, drop_last=False, shuffle=False)
         self.model = talkNet().to(device)
         self.model.loadParameters(model_path)
@@ -173,6 +179,14 @@ def random_5s_clip(video, frame_rate=25):
         return F.pad(video, padding, mode='constant', value=0)
 
 def main():
+    import argparse
+    parser = argparse.ArgumentParser(description="Extract TalkNet visual features")
+    parser.add_argument("--speech_dataset", type=str, default="VoxCeleb2",
+                        help="Speech dataset to process")
+    parser.add_argument("--split", type=str, default="",
+                        help="Split to process: train, val, test")
+    args = parser.parse_args()
+    
     model_path = os.path.join(config.TALKNET_PATH, "pretrain_TalkSet.model")
     
     # Download pretrained model if not exists
@@ -185,11 +199,15 @@ def main():
         print(f"Model downloaded to {model_path}")
     
     data_split = "./data/split.csv"
+    data_path = config.SPEECH_DATASETS.get(args.speech_dataset, config.SPEECH_FOLDER_PATH)
+    print(f"Using dataset: {args.speech_dataset} -> {data_path}")
+    
     process = TalkNetBatchedPreprocessing(
         model_path,
         data_split,
-        SPEECH_FOLDER_PATH,
-        # split = "test",
+        data_path,
+        split=args.split,
+        dataset=args.speech_dataset,
         num_workers=2 # os.cpu_count() = 16 or 64
     )
     process.extract_features()

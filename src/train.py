@@ -30,11 +30,18 @@ def get_latest_checkpoint_path(checkpoint_dir):
 
 
 def train(args, train_from_checkpoint=True):
+    # 根据参数选择数据集路径
+    speech_folder_path = config.SPEECH_DATASETS.get(
+        args.speech_dataset, 
+        config.SPEECH_FOLDER_PATH
+    )
+    print(f"Using dataset: {args.speech_dataset} -> {speech_folder_path}")
+    
     if not os.path.exists(args.checkpoint_dir):
         os.makedirs(args.checkpoint_dir, exist_ok=True)
 
     datamodule = VoxCeleb2DataModule(
-        speech_folder_path=config.SPEECH_FOLDER_PATH,  
+        data_path=speech_folder_path,  
         visual_encoder=args.visual_encoder,
         embedding_size=args.embedding_size,
         batch_size=args.batch_size,
@@ -96,6 +103,9 @@ def train(args, train_from_checkpoint=True):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train the AV speech model with flexible configuration.")
 
+    parser.add_argument("--speech_dataset", type=str, default=config.DEFAULT_SPEECH_DATASET,
+                        choices=list(config.SPEECH_DATASETS.keys()),
+                        help="Speech dataset to use")
     parser.add_argument("--visual_encoder", type=str, default=config.VISUAL_ENCODER,
                         choices=config.embedding_size_dict.keys(), help="Visual encoder to use")
     parser.add_argument("--embedding_size", type=int,
