@@ -23,9 +23,9 @@ restore_terminal() {
 trap 'restore_terminal; exit' INT TERM EXIT
 
 # Configuration
-INPUT_DIR="/mnt/e/data/VoxCeleb2/dev/mp4"
-OUTPUT_FORMAT="m4a"  # Options: wav or m4a
-OUTPUT_DIR="/mnt/e/data/VoxCeleb2/dev/aac"
+INPUT_DIR="/mnt/e/data/GRID/mp4"
+OUTPUT_FORMAT="wav"  # Options: wav or m4a
+OUTPUT_DIR="/mnt/e/data/GRID/wav"
 SAMPLE_RATE=16000
 NUM_WORKERS=16
 

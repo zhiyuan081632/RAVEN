@@ -43,25 +43,16 @@ class VideoTransform:
 class VideoDataset(Dataset):
     def __init__(
             self, 
-            data_split_path ,
             data_path,
-            split=None,
-            dataset=None,
             face_track: bool = True, 
             ) -> None:
         super().__init__()
         self.data_path = data_path
-        self.split = split
-        self.dataset = dataset
-        # 根据 split 和 dataset 过滤数据
-        self.df = pd.read_csv(data_split_path)
-        if split:
-            all_data = all_data[all_data["split"] == split]
-        if dataset:
-            all_data = all_data[all_data["dataset"] == dataset]
-            print(f"Filtered by split='{split}', dataset='{dataset}': {len(all_data)} samples")
-        # 使用 video_fp 列，避免 aac/wav 路径差异
-        self.file_list = all_data["video_fp"].reset_index(drop=True)
+        # 扫描目录获取所有mp4文件（相对路径）
+        self.file_list = sorted(
+            str(p.relative_to(data_path)) for p in Path(data_path).rglob("*.mp4")
+        )
+        print(f"Found {len(self.file_list)} video files in {data_path}")
         self.video_processor = VideoProcess()
         self.video_transform = VideoTransform(speed_rate=1)
         self.face_track = face_track
@@ -165,33 +156,28 @@ def custom_collate(batch):
 class AVHuBERTBatchedPreprocessing:
     def __init__(
             self,
-            data_split_path,
-            data_path = True,
-            split = None,
-            dataset = None,
+            data_path,
+            output_dir,
             batch_size = None,
             num_workers = 1,
             face_track: bool = True, 
             device = "cuda"
         ) -> None:
         super().__init__()
-        self.split = split
-        self.dataset = dataset
-        self.ds = VideoDataset(data_split_path, data_path, split=split, dataset=dataset, face_track=face_track)
+        self.output_dir = output_dir
+        self.ds = VideoDataset(data_path, face_track=face_track)
         self.dataloader = DataLoader(self.ds, batch_size=batch_size, num_workers=num_workers, 
                                      drop_last=False, worker_init_fn=video_dataset_worker_init,
                                      collate_fn=custom_collate)
         self.device = device
-        # Extract split name from data_split_path (e.g., "split.csv" -> "split")
-        self.split = os.path.splitext(os.path.basename(data_split_path))[0]
         fairseq_utils.import_user_module(Namespace(user_dir=config.AVHUBERT_PATH))
         models, saved_cfg, task = checkpoint_utils.load_model_ensemble_and_task([os.path.join(config.AVHUBERT_PATH, "conf/finetune/base_lrs3_433h.pt" )])
         self.model = models[0].encoder.w2v_model.feature_extractor_video.to(self.device)
         self.model.eval()
 
     def extract_features(self):
-        # 使用统一的失败记录文件（不分 train/val/test）
-        failed_text_path = os.path.join(config.SPEECH_FOLDER_PATH, "failed_avhubert_frontE_feat_split.txt")
+        os.makedirs(self.output_dir, exist_ok=True)
+        failed_text_path = os.path.join(self.output_dir, "failed_AVHuBERT.txt")
         success_count = 0
         skip_count = 0
         failure_count = 0
@@ -208,7 +194,8 @@ class AVHuBERTBatchedPreprocessing:
                             failure_count += 1
                         continue
                     
-                    output_ft_path = fp.replace("/mp4/", "/AVHuBERT_feats/")
+                    rel_path = os.path.relpath(fp, self.ds.data_path)
+                    output_ft_path = os.path.join(self.output_dir, rel_path)
                     output_ft_path = output_ft_path.replace(".mp4", ".npy")
                     # 跳过已存在的npy文件
                     if os.path.exists(output_ft_path):
@@ -253,25 +240,18 @@ class AVHuBERTBatchedPreprocessing:
 
 def main():
     import argparse
-    parser = argparse.ArgumentParser(description="Extract AVHuBERT visual features")
-    parser.add_argument("--speech_dataset", type=str, default="VoxCeleb2",
-                        help="Speech dataset to process")
-    parser.add_argument("--split", type=str, default="",
-                        help="Split to process: train, val, test")
+    parser = argparse.ArgumentParser(description="Extract AVHuBERT visual features from directory")
+    parser.add_argument("input_dir", help="Input video directory (contains .mp4 files)")
+    parser.add_argument("output_dir", help="Output feature directory (will mirror input structure)")
+    parser.add_argument("--num_workers", type=int, default=8, help="Number of DataLoader workers")
     args = parser.parse_args()
     
-    data_split = "./data/split.csv"
-    data_path = config.SPEECH_DATASETS.get(args.speech_dataset, config.SPEECH_FOLDER_PATH)
-    print(f"Using dataset: {args.speech_dataset} -> {data_path}")
-    
     process = AVHuBERTBatchedPreprocessing(
-        data_split,
-        data_path,
-        split=args.split,
-        dataset=args.speech_dataset,
+        args.input_dir,
+        args.output_dir,
         face_track=True,
-        num_workers=8,  # Further reduced from 16 to 8 to avoid OOM
-        batch_size=1   # Process one video at a time
+        num_workers=args.num_workers,
+        batch_size=1
     )
     process.extract_features()
 

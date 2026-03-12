@@ -35,27 +35,15 @@ SPEECH_FOLDER_PATH = config.SPEECH_FOLDER_PATH
 class VideoDataset(Dataset):
     def __init__(
             self, 
-            data_split_path ,
             data_path,
-
-            split,
-            dataset=None
             ) :
         super().__init__()
-        self.df = pd.read_csv(data_split_path)
         self.data_path = data_path
-        self.split = split
-        self.dataset = dataset
-        # 根据 split 过滤数据
-        all_data = pd.read_csv(data_split_path)
-        if split:
-            all_data = all_data[all_data["split"] == split]
-        # 根据 dataset 过滤数据
-        if dataset:
-            all_data = all_data[all_data["dataset"] == dataset]
-            print(f"Filtered by split='{split}', dataset='{dataset}': {len(all_data)} samples")
-        # 使用 video_fp 列，避免 aac/wav 路径差异
-        self.file_list = all_data["video_fp"].reset_index(drop=True).tolist()
+        # 扫描目录获取所有mp4文件（相对路径）
+        self.file_list = sorted(
+            str(p.relative_to(data_path)) for p in Path(data_path).rglob("*.mp4")
+        )
+        print(f"Found {len(self.file_list)} video files in {data_path}")
 
 
     def __len__(self):
@@ -79,16 +67,15 @@ class TalkNetBatchedPreprocessing:
     def __init__(
             self,
             model_path,
-            data_split_path,
             data_path,
-            split=None,
+            output_dir,
             batch_size: int = None,
             num_workers: int = 1,
             device = "cpu"
         ) -> None:
         super().__init__()
-        self.split = split
-        self.ds = VideoDataset(data_split_path, data_path, split = self.split)
+        self.output_dir = output_dir
+        self.ds = VideoDataset(data_path)
         self.dataloader = DataLoader(self.ds, batch_size=batch_size, num_workers=num_workers, drop_last=False, shuffle=True)
         # Initialize cfg using bootstrap with config file
         config_file = os.path.join(config.LOCONET_PATH, 'configs/multi.yaml')
@@ -102,8 +89,8 @@ class TalkNetBatchedPreprocessing:
         self.device = device
 
     def extract_features(self):
-        # 使用统一的失败记录文件（不分 train/val/test）
-        failed_text_path = os.path.join(config.SPEECH_FOLDER_PATH, "failed_Loconet_frontE_feat_split.txt")
+        os.makedirs(self.output_dir, exist_ok=True)
+        failed_text_path = os.path.join(self.output_dir, "failed_LoCoNet.txt")
         success_count = 0
         skip_count = 0
         failure_count = 0
@@ -113,8 +100,9 @@ class TalkNetBatchedPreprocessing:
             for video_tensor, fp in tqdm(self.dataloader):
                 try:
                     if video_tensor is not None:
-                        output_path = fp.replace("/mp4/", "/Loconet_feats/")
-                        output_ft_path = output_path.replace(".mp4", ".npy")
+                        rel_path = os.path.relpath(fp, self.ds.data_path)
+                        output_ft_path = os.path.join(self.output_dir, rel_path)
+                        output_ft_path = output_ft_path.replace(".mp4", ".npy")
                         # 跳过已存在的npy文件
                         if os.path.exists(output_ft_path):
                             skip_count += 1
@@ -191,11 +179,10 @@ def random_5s_clip(video, frame_rate=25):
 
 def main():
     import argparse
-    parser = argparse.ArgumentParser(description="Extract LoCoNet visual features")
-    parser.add_argument("--speech_dataset", type=str, default="VoxCeleb2",
-                        help="Speech dataset to process")
-    parser.add_argument("--split", type=str, default="",
-                        help="Split to process: train, val, test")
+    parser = argparse.ArgumentParser(description="Extract LoCoNet visual features from directory")
+    parser.add_argument("input_dir", help="Input video directory (contains .mp4 files)")
+    parser.add_argument("output_dir", help="Output feature directory (will mirror input structure)")
+    parser.add_argument("--num_workers", type=int, default=1, help="Number of DataLoader workers")
     args = parser.parse_args()
     
     model_path = os.path.join(config.LOCONET_PATH, "loconet_ava_best.model")
@@ -221,17 +208,11 @@ def main():
             return
         print(f"Model downloaded successfully to {model_path}")
     
-    data_split = os.path.join(config.PROJECT_ROOT, "src/data/split.csv")
-    data_path = config.SPEECH_DATASETS.get(args.speech_dataset, config.SPEECH_FOLDER_PATH)
-    print(f"Using dataset: {args.speech_dataset} -> {data_path}")
-    
     process = TalkNetBatchedPreprocessing(
         model_path,
-        data_split,
-        data_path,
-        split=args.split,
-        dataset=args.speech_dataset,
-        num_workers=1  # os.cpu_count() = 4 or 64
+        args.input_dir,
+        args.output_dir,
+        num_workers=args.num_workers
     )
     process.extract_features()
 

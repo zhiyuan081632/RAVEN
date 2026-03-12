@@ -22,9 +22,10 @@ python -W ignore utils/mix_speech_gpu.py
 # Extract visual feature with different methods
 ## VSRiW
 python data/VSRiW_extract_visual_features.py --speech_dataset VoxCeleb2 --split train
+python data/VSRiW_extract_visual_features.py /mnt/e/data/VoxCeleb2/test/mp4 /mnt/e/data/VoxCeleb2/test/vsriw --num_workers 1
 
 ## TalkNet
-python data/TalkNet_extract_visual_features.py --speech_dataset VoxCeleb2 --split train
+python data/TalkNet_extract_visual_features.py /mnt/e/data/VoxCeleb2/test/mp4 /mnt/e/data/VoxCeleb2/test/TalkNet_feats --num_workers 1
 
 ## LoCoNet
 python data/LoCoNet_extract_visual_features.py --speech_dataset VoxCeleb2 --split train
