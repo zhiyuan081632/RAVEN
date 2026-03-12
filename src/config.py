@@ -12,14 +12,16 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # RA
 SPEECH_DATASETS = {
     "VoxCeleb2": "/mnt/e/data/VoxCeleb2",
     "ChineseLips": "/mnt/e/data/ChineseLips",
+    "GRID": "/mnt/e/data/GRID",
     # 可在此添加更多数据集，如:
     # "LRS3": "/mnt/e/data/LRS3",
 }
 
-# 默认使用的数据集
-DEFAULT_SPEECH_DATASET = "ChineseLips"
+# 默认使用的语音数据集
+DEFAULT_SPEECH_DATASET = "GRID"
 SPEECH_FOLDER_PATH = SPEECH_DATASETS[DEFAULT_SPEECH_DATASET]
 
+# 噪声数据集
 MUSAN_FOLDER_PATH = "/mnt/e/data/MUSAN"
 
 ##############################################################

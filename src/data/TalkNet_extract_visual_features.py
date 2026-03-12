@@ -208,7 +208,7 @@ def main():
         data_path,
         split=args.split,
         dataset=args.speech_dataset,
-        num_workers=2 # os.cpu_count() = 16 or 64
+        num_workers=1 # os.cpu_count() = 16 or 64
     )
     process.extract_features()
 

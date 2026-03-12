@@ -208,7 +208,7 @@ class AVSRBatchedPreprocessing:
 
 def main():
     import argparse
-    parser = argparse.ArgumentParser(description="Extract VSRiW visual features")
+    parser = argparse.ArgumentParser(description="Extract visual features")
     parser.add_argument("--speech_dataset", type=str, default="VoxCeleb2",
                         help="Speech dataset to process")
     parser.add_argument("--split", type=str, default="",
@@ -229,7 +229,7 @@ def main():
         split=args.split,
         dataset=args.speech_dataset,
         face_track=True,
-        num_workers=8 # os.cpu_count() = 16 or 64
+        num_workers=1 # os.cpu_count() = 16 or 64
     )
     process.extract_features()
 
