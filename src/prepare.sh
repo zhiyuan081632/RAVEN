@@ -1,19 +1,8 @@
 
 # Convert mp4 file to ma4c/wav
-# ./data/convert_mp4_to_wav.sh
+./data/convert_mp4_to_wav.sh
 
-# 配置开关: "small" 或 "full"
-MODE="small"
-
-if [ "$MODE" = "small" ]; then
-    echo "使用小量数据模式"
-    ##  Split small data from full data 
-    python data/extract_small_data.py
-    cp data/split_small.csv data/split.csv
-elif [ "$MODE" = "full" ]; then
-    echo "使用完整数据模式"
-    cp data/split_full.csv data/split.csv
-fi
+# If you want to run all demo pipeline please using  "VoxCeleb2_train_1000.txt" in the config file
 
 
 # Mix speech with noise for train/val data
@@ -21,17 +10,16 @@ python -W ignore utils/mix_speech_gpu.py
 
 # Extract visual feature with different methods
 ## VSRiW
-python data/VSRiW_extract_visual_features.py --speech_dataset VoxCeleb2 --split train
-python data/VSRiW_extract_visual_features.py /mnt/e/data/VoxCeleb2/test/mp4 /mnt/e/data/VoxCeleb2/test/vsriw --num_workers 1
+python data/extract_visual_features_VSRiW.py /mnt/e/data/VoxCeleb2/test/mp4 /mnt/e/data/VoxCeleb2/test/vsriw --num_workers 1
 
 ## TalkNet
-python data/TalkNet_extract_visual_features.py /mnt/e/data/VoxCeleb2/test/mp4 /mnt/e/data/VoxCeleb2/test/TalkNet_feats --num_workers 1
+python data/extract_visual_features_TalkNet.py /mnt/e/data/VoxCeleb2/test/mp4 /mnt/e/data/VoxCeleb2/test/TalkNet_feats --num_workers 1
 
 ## LoCoNet
-python data/LoCoNet_extract_visual_features.py --speech_dataset VoxCeleb2 --split train
+python data/extract_visual_features_LocoNet.py /mnt/e/data/VoxCeleb2/test/mp4 /mnt/e/data/VoxCeleb2/test/LoCoNet_feats --num_workers 1
 
 # AVHuBERT
-python data/AVHuBERT_extract_visual_features.py --speech_dataset VoxCeleb2 --split train
+python data/extract_visual_features_AVHuBERT.py /mnt/e/data/VoxCeleb2/test/mp4 /mnt/e/data/VoxCeleb2/test/AVHuBERT_feats --num_workers 1
 
 
 # Generate test data 

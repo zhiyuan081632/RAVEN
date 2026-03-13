@@ -68,13 +68,15 @@ class System(pl.LightningModule):
         return loss, sisdr, sisdr_gain,snr,snr_gain ,clean_audio_pred, clean_audio_target
     
     def training_step(self, batch, batch_idx):
-    
+        if batch is None:
+            return None
         loss, sisdr, sisdr_gain, snr, snr_gain,  clean_audio_pred , clean_audio_target = self.common_step(batch, batch_idx)
         self.log_dict({"train/loss": loss, "train/sisdr": sisdr, "train/sisdr_gain": sisdr_gain, "train/snr": snr, "train/snr_gain": snr_gain})
         return loss
     
     def validation_step(self, batch, batch_idx):
-        
+        if batch is None:
+            return None
         loss, sisdr, sisdr_gain, snr, snr_gain, clean_audio_pred, clean_audio_target = self.common_step(batch, batch_idx)
         pesq = self.get_pesq(clean_audio_pred, clean_audio_target, batch)
         estoi = self.get_estoi(clean_audio_pred, clean_audio_target, batch)
@@ -84,7 +86,8 @@ class System(pl.LightningModule):
         return loss
     
     def test_step(self, batch, batch_idx):
-        
+        if batch is None:
+            return None
         loss, sisdr, sisdr_gain, snr, snr_gain, clean_audio_pred, clean_audio_target = self.common_step(batch, batch_idx)
         pesq = self.get_pesq(clean_audio_pred, clean_audio_target, batch)
         estoi = self.get_estoi(clean_audio_pred, clean_audio_target, batch)

@@ -5,8 +5,8 @@ test_conditions=("noise_only" "one_interfering_speaker" "three_interfering_speak
 test_snrs=("-10" "-5" "0")
 
 # 模型路径
-visual_encoder="AVHuBERT_VSRiW_concatenate"
-ckpt_path="/mnt/e/project/prjANS/src/AVSE/RAVEN/src/checkpoints/ckpt_20260311101637/AVHuBERT_VSRiW_concatenate_5layer/last.ckpt"
+visual_encoder="VSRiW_TalkNet_concatenate"
+ckpt_path="/mnt/e/project/prjANS/src/AVSE/train/ckpt_20260304134032/VSRiW_TalkNet_concatenate_5layer/last.ckpt"
 
 # 遍历组合
 for condition in "${test_conditions[@]}"; do

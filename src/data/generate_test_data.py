@@ -3,37 +3,25 @@ import os
 import argparse
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-import pandas as pd
 import numpy as np
 from utils.utils import crop_pad_audio
 import librosa
 import hashlib
-import os
 import soundfile as sf
 from tqdm import tqdm
 import config
-
-SAVE_TEST_FP = False
-
-
-def random_select_fps(df, n=1000):
-    
-    df = df[df["split"] == "test"].sample(n, random_state=42, replace=False)["audio_fp"]
-    if SAVE_TEST_FP:
-        df.to_csv("./data/VoxCeleb2_test_1000_fps.txt", index=False)
-    
-    return df
+from data.dataset import _load_list_files, _mp4_to_wav
 
 
 
 
-def generate_noise_condition(target_fp, noise_df, snr, orig_sr=16000, crop_length=5):
+def generate_noise_condition(target_fp, noise_fps, snr, orig_sr=16000, crop_length=5):
     
     target_audio = crop_pad_audio(target_fp, orig_sr, crop_length)
     target_audio = librosa.util.normalize(target_audio)
     seed = int(hashlib.md5(target_fp.encode()).hexdigest(), 16) % (10 ** 8)
-    noise_fp = noise_df.sample(1, random_state=seed)["filepath"].values[0]
-    noise_fp = os.path.join(config.MUSAN_FOLDER_PATH, noise_fp)
+    rng = np.random.RandomState(seed)
+    noise_fp = rng.choice(noise_fps)
     noise_audio = crop_pad_audio(noise_fp, orig_sr, crop_length)
     noise_audio = librosa.util.normalize(noise_audio)
     
@@ -42,12 +30,13 @@ def generate_noise_condition(target_fp, noise_df, snr, orig_sr=16000, crop_lengt
     return mixed_audio
 
 
-def generate_one_interfering_speaker_condition(target_fp, subset_test_df, snr, orig_sr=16000, crop_length=5):
+def generate_one_interfering_speaker_condition(target_fp, all_wav_fps, snr, orig_sr=16000, crop_length=5):
     target_audio = crop_pad_audio(target_fp, orig_sr, crop_length)
     target_audio = librosa.util.normalize(target_audio)
-    # generate seed based on target_fp
     seed = int(hashlib.md5(target_fp.encode()).hexdigest(), 16) % (10 ** 8)
-    interfering_speaker_fp = subset_test_df.sample(1, random_state=seed)["audio_fp"].values[0]
+    rng = np.random.RandomState(seed)
+    candidates = [fp for fp in all_wav_fps if fp != target_fp]
+    interfering_speaker_fp = rng.choice(candidates)
     interfering_speaker_audio = crop_pad_audio(interfering_speaker_fp, orig_sr, crop_length)
     interfering_speaker_audio = librosa.util.normalize(interfering_speaker_audio)
     
@@ -55,13 +44,14 @@ def generate_one_interfering_speaker_condition(target_fp, subset_test_df, snr, o
     
     return mixed_audio
 
-def generate_three_interfering_speakers_condition(target_fp, subset_test_df, snr, orig_sr=16000, crop_length=5):
+def generate_three_interfering_speakers_condition(target_fp, all_wav_fps, snr, orig_sr=16000, crop_length=5):
     target_audio = crop_pad_audio(target_fp, orig_sr, crop_length)
     target_audio = librosa.util.normalize(target_audio)
-    # generate seed based on target_fp
     seed = int(hashlib.md5(target_fp.encode()).hexdigest(), 16) % (10 ** 8)
-    interfering_speaker_fp = subset_test_df.sample(3, random_state=seed)["audio_fp"].values
-    interfering_speaker_audio = [crop_pad_audio(fp, orig_sr, crop_length) for fp in interfering_speaker_fp]
+    rng = np.random.RandomState(seed)
+    candidates = [fp for fp in all_wav_fps if fp != target_fp]
+    interfering_fps = rng.choice(candidates, size=3, replace=False)
+    interfering_speaker_audio = [crop_pad_audio(fp, orig_sr, crop_length) for fp in interfering_fps]
     interfering_speaker_audio = [librosa.util.normalize(audio) for audio in interfering_speaker_audio]
     interfering_speaker_audio = np.sum(interfering_speaker_audio, axis=0)
     assert len(interfering_speaker_audio) == len(target_audio)
@@ -74,31 +64,27 @@ def generate_three_interfering_speakers_condition(target_fp, subset_test_df, snr
 
 
 
-def main(condition, snr, speech_dataset):
-    # 根据数据集获取路径
-    speech_folder_path = config.SPEECH_DATASETS.get(speech_dataset, config.SPEECH_FOLDER_PATH)
-    print(f"Using dataset: {speech_dataset} -> {speech_folder_path}")
+def main(condition, snr):
+    # 从 config 读取测试集 list
+    mp4_fps = _load_list_files(config.SPEECH_TEST_LISTS)
+    all_wav_fps = [_mp4_to_wav(fp) for fp in mp4_fps]
     
-    musan_fps = pd.read_csv("./data/musan_split.csv")
-    main_df = pd.read_csv("./data/split.csv")
-    subset_test_df = main_df[main_df["split"] == "test"].copy()
-    subset_test_df["audio_fp"] = subset_test_df["audio_fp"].apply(
-        lambda fp: os.path.join(speech_folder_path, fp)
-    )
-    target_test_df = random_select_fps(main_df)
-    musan_noise_test_df = musan_fps[(musan_fps["split"] == "test") & (musan_fps["type"] == "noise")]
+    # 噪声
+    noise_fps = _load_list_files(config.NOISE_LISTS.get("test", []))
     
-    for i, target_fp in tqdm(enumerate(target_test_df)):
-        abs_target_fp = os.path.join(speech_folder_path, target_fp)
+    print(f"Test speech files: {len(all_wav_fps)}")
+    print(f"Test noise files: {len(noise_fps)}")
+    
+    for i, wav_fp in tqdm(enumerate(all_wav_fps), total=len(all_wav_fps)):
         if condition == "noise_only":
-            mixed_audio = generate_noise_condition(abs_target_fp, musan_noise_test_df, snr)
+            mixed_audio = generate_noise_condition(wav_fp, noise_fps, snr)
         elif condition == "one_interfering_speaker":
-            mixed_audio = generate_one_interfering_speaker_condition(abs_target_fp, subset_test_df, snr)
+            mixed_audio = generate_one_interfering_speaker_condition(wav_fp, all_wav_fps, snr)
         elif condition == "three_interfering_speakers":
-            mixed_audio = generate_three_interfering_speakers_condition(abs_target_fp, subset_test_df, snr)
+            mixed_audio = generate_three_interfering_speakers_condition(wav_fp, all_wav_fps, snr)
         
-        mixed_audio_fp = abs_target_fp.replace("/aac/", f"/mixed_wav/{condition}/{snr}/").replace(".m4a", ".wav")
-        # check if directory exists
+        # 输出路径: /wav/ -> /mixed_wav/{condition}/{snr}/
+        mixed_audio_fp = wav_fp.replace('/wav/', f'/mixed_wav/{condition}/{snr}/')
         os.makedirs(os.path.dirname(mixed_audio_fp), exist_ok=True)
         
         sf.write(mixed_audio_fp, mixed_audio, 16000)
@@ -128,21 +114,17 @@ import argparse
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Generate test data under various conditions.")
-    parser.add_argument("--speech_dataset", type=str, default=config.DEFAULT_SPEECH_DATASET,
-                        choices=list(config.SPEECH_DATASETS.keys()),
-                        help="Speech dataset to use")
     parser.add_argument("--condition", type=str, required=True,
                         help='Condition(s), comma-separated if multiple: noise_only,one_interfering_speaker')
     parser.add_argument("--snr", type=str, required=True,
-                        help='SNR value(s), comma-separated if multiple: mixed,-10,-5, 0')
+                        help='SNR value(s), comma-separated if multiple: mixed,-10,-5,0')
 
     args = parser.parse_args()
 
-    # Split by comma, strip whitespace
     conditions = [c.strip() for c in args.condition.split(",")]
     snrs = [s.strip() for s in args.snr.split(",")]
 
     for condition in conditions:
         for snr in snrs:
             print(f"Running condition: {condition}, SNR: {snr}")
-            main(condition, snr, args.speech_dataset)
+            main(condition, snr)

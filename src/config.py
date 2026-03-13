@@ -1,28 +1,48 @@
 import os
 
 ###############################################################
-################# CHANGE YOUR PATH ############################
+################# PROJECT PATH ############################
 ###############################################################
 
-#TODO: replace with your own project root and data folder paths
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # RAVEN/
 
-# 支持多个语音数据集字典
-# 格式: {数据集名: 数据路径}
-SPEECH_DATASETS = {
-    "VoxCeleb2": "/mnt/e/data/VoxCeleb2",
-    "ChineseLips": "/mnt/e/data/ChineseLips",
-    "GRID": "/mnt/e/data/GRID",
-    # 可在此添加更多数据集，如:
-    # "LRS3": "/mnt/e/data/LRS3",
+
+##############################################################
+################ DATA LIST CONFIGURATION #####################
+##############################################################
+# list 文件路径（data/ 目录下），每个文件每行一个绝对路径
+# speech: mp4 绝对路径，音频路径自动由 /mp4/ -> /wav/, .mp4 -> .wav 推导
+
+_DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
+
+# 训练集 speech list（可配置多个）
+SPEECH_TRAIN_LISTS = [
+    os.path.join(_DATA_DIR, "VoxCeleb2_train_1000.txt"),
+    os.path.join(_DATA_DIR, "GRID_train_1000.txt"),
+    # "/mnt/e/data/VoxCeleb2/dev/VoxCeleb2_train_list.txt",
+]
+# 验证集 speech list
+SPEECH_VAL_LISTS = [
+    os.path.join(_DATA_DIR, "VoxCeleb2_val_1000.txt"),
+]
+# 测试集 speech list
+SPEECH_TEST_LISTS = [
+    os.path.join(_DATA_DIR, "VoxCeleb2_test_1000.txt"),
+]
+
+# 噪声 list（按 split 分组）
+import glob as _glob
+NOISE_LISTS = {
+    "train": sorted(_glob.glob(os.path.join(_DATA_DIR, "musan_noise_train.txt"))),
+    "val":   sorted(_glob.glob(os.path.join(_DATA_DIR, "musan_noise_val.txt"))),
+    "test":  sorted(_glob.glob(os.path.join(_DATA_DIR, "musan_noise_test.txt"))),
 }
-
-# 默认使用的语音数据集
-DEFAULT_SPEECH_DATASET = "GRID"
-SPEECH_FOLDER_PATH = SPEECH_DATASETS[DEFAULT_SPEECH_DATASET]
-
-# 噪声数据集
-MUSAN_FOLDER_PATH = "/mnt/e/data/MUSAN"
+# 音乐 list（按 split 分组）
+MUSIC_LISTS = {
+    "train": sorted(_glob.glob(os.path.join(_DATA_DIR, "musan_music_train.txt"))),
+    "val":   sorted(_glob.glob(os.path.join(_DATA_DIR, "musan_music_val.txt"))),
+    "test":  sorted(_glob.glob(os.path.join(_DATA_DIR, "musan_music_test.txt"))),
+}
 
 ##############################################################
 ################## OVERALL CONFIGURATION #####################
@@ -58,14 +78,6 @@ P = 0.3
 ##############################################################
 ################# TRAINING CONFIGURATION #####################
 ##############################################################
-
-
-DATE="20260311"
-VERSION_NAME = f"{VISUAL_ENCODER}_5layer_{DATE}"
-CHECKPOINT_DIR = os.path.join(PROJECT_ROOT, f"src/checkpoints/{VERSION_NAME}")
-
-# REPLACE WITH YOUR STORED MODEL CHECKPOINT
-CKPT_PATH=os.path.join(PROJECT_ROOT, "src/checkpoints/path/to/checkpoint.ckpt")
 
 TRAINING_LOWER_SNR = -10
 TRAINING_UPPER_SNR = 10

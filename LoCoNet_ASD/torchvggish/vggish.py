@@ -1,7 +1,10 @@
+import os
 import numpy as np
 import torch
 import torch.nn as nn
 from torch import hub
+
+_LOCAL_MODEL_DIR = os.path.dirname(os.path.abspath(__file__))
 
 from . import vggish_input, vggish_params
 
@@ -162,7 +165,11 @@ class VGGish(VGG):
                  progress=True):
         super().__init__(make_layers())
         if pretrained:
-            state_dict = hub.load_state_dict_from_url(urls['vggish'], progress=progress)
+            local_vggish = os.path.join(_LOCAL_MODEL_DIR, 'vggish-10086976.pth')
+            if os.path.exists(local_vggish):
+                state_dict = torch.load(local_vggish, map_location='cpu')
+            else:
+                state_dict = hub.load_state_dict_from_url(urls['vggish'], progress=progress)
             info = super().load_state_dict(state_dict, strict=False)
 
         if device is None:

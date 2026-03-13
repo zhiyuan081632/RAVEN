@@ -63,10 +63,10 @@ def convert_mpg_to_mp4_parallel(src_dir, dst_dir, max_workers=None):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="并行转换 MPG 到 MP4（保持目录结构）")
-    parser.add_argument("src_dir", help="源目录（包含 .mpg 文件）")
-    parser.add_argument("dst_dir", help="目标目录（生成 .mp4 文件）")
+    parser.add_argument("input_dir", help="输入目录（包含 .mpg 文件）")
+    parser.add_argument("output_dir", help="输出目录（生成 .mp4 文件）")
     parser.add_argument("-j", "--jobs", type=int, default=None,
                         help="最大并发进程数（默认为 CPU 核数）")
     args = parser.parse_args()
 
-    convert_mpg_to_mp4_parallel(args.src_dir, args.dst_dir, max_workers=args.jobs)
+    convert_mpg_to_mp4_parallel(args.input_dir, args.output_dir, max_workers=args.jobs)

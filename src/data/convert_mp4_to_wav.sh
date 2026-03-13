@@ -23,9 +23,9 @@ restore_terminal() {
 trap 'restore_terminal; exit' INT TERM EXIT
 
 # Configuration
-INPUT_DIR="/mnt/e/data/GRID/mp4"
+INPUT_DIR="/mnt/e/data/VoxCeleb2/dev/mp4"
 OUTPUT_FORMAT="wav"  # Options: wav or m4a
-OUTPUT_DIR="/mnt/e/data/GRID/wav"
+OUTPUT_DIR="/mnt/e/data/VoxCeleb2/dev/wav"
 SAMPLE_RATE=16000
 NUM_WORKERS=16
 
@@ -49,12 +49,12 @@ fi
 mkdir -p "$OUTPUT_DIR"
 
 # Run Python script
-python data/preprocess_audio.py \
-    --input_dir "$INPUT_DIR" \
-    --output_dir "$OUTPUT_DIR" \
+python data/convert_mp4_to_wav.py \
+    "$INPUT_DIR" \
+    "$OUTPUT_DIR" \
+    -j $NUM_WORKERS \
     --sample_rate $SAMPLE_RATE \
-    --output_format $OUTPUT_FORMAT \
-    --num_workers $NUM_WORKERS
+    --format $OUTPUT_FORMAT
 
 # Capture exit code
 EXIT_CODE=$?

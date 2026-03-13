@@ -2,25 +2,48 @@ import pytorch_lightning as pl
 from torch.utils import data
 from data.dataset import VoxCeleb2
 import torch
-import pandas as pd
+import glob
+import os
 
-SPLIT_FILE_PATH = "./data/split.csv"
 
-class VoxCeleb2DataModule(pl.LightningDataModule):
+class DataModule(pl.LightningDataModule):
 
-    def __init__(self, data_path, visual_encoder, embedding_size, batch_size=4, num_workers=2):
-        super(VoxCeleb2DataModule, self).__init__()
+    def __init__(self, visual_encoder, embedding_size, batch_size=4, num_workers=2,
+                 speech_train_lists=None, speech_val_lists=None, speech_test_lists=None,
+                 noise_lists=None, music_lists=None):
+        super(DataModule, self).__init__()
         self.batch_size = batch_size
         self.num_workers = num_workers
         self.visual_encoder = visual_encoder
         self.embedding_size = embedding_size
-        self.data_path = data_path
+        # speech list 文件
+        self.speech_train_lists = speech_train_lists or []
+        self.speech_val_lists = speech_val_lists or []
+        self.speech_test_lists = speech_test_lists or []
+        # noise/music list 文件（按 split 分组）
+        self.noise_lists = noise_lists or {}
+        self.music_lists = music_lists or {}
 
-    def setup(self, test_condition, test_snr):
-        all_data = pd.read_csv(SPLIT_FILE_PATH)
-        self.train_dataset = VoxCeleb2("train", self.data_path, self.visual_encoder, self.embedding_size, all_data)
-        self.val_dataset = VoxCeleb2("val", self.data_path, self.visual_encoder, self.embedding_size, all_data)
-        self.test_dataset = VoxCeleb2("test", self.data_path, self.visual_encoder, self.embedding_size, all_data, test_condition, test_snr)
+    def setup(self, test_condition=None, test_snr=None):
+        self.train_dataset = VoxCeleb2(
+            "train", self.visual_encoder, self.embedding_size,
+            speech_lists=self.speech_train_lists,
+            noise_lists=self.noise_lists.get("train"),
+            music_lists=self.music_lists.get("train"),
+        )
+        self.val_dataset = VoxCeleb2(
+            "val", self.visual_encoder, self.embedding_size,
+            speech_lists=self.speech_val_lists,
+            noise_lists=self.noise_lists.get("val"),
+            music_lists=self.music_lists.get("val"),
+        )
+        self.test_dataset = VoxCeleb2(
+            "test", self.visual_encoder, self.embedding_size,
+            speech_lists=self.speech_test_lists,
+            noise_lists=self.noise_lists.get("test"),
+            music_lists=self.music_lists.get("test"),
+            condition=test_condition, snr=test_snr,
+        )
 
 
     def train_dataloader(self):
@@ -34,11 +57,15 @@ class VoxCeleb2DataModule(pl.LightningDataModule):
             return data.DataLoader(self.val_dataset, batch_size=self.batch_size, shuffle=False, num_workers=self.num_workers, collate_fn=self.collate_fn_custom, persistent_workers=True, prefetch_factor=2)
 
     def test_dataloader(self):
-        return data.DataLoader(self.test_dataset, batch_size=self.batch_size, shuffle=False, num_workers=self.num_workers, persistent_workers=True, prefetch_factor=2)
+        return data.DataLoader(self.test_dataset, batch_size=self.batch_size, shuffle=False, num_workers=self.num_workers, collate_fn=self.collate_fn_custom, persistent_workers=True, prefetch_factor=2)
     
 
 
     def collate_fn_custom(self, batch):
+        # 过滤缺失数据（__getitem__ 返回 None 的条目）
+        batch = [x for x in batch if x is not None]
+        if len(batch) == 0:
+            return None
         return {
             'face_embed': torch.stack([x['face_embed'] for x in batch]).to("cuda", non_blocking=True), 
             'input_audio': torch.stack([x['input_audio'] for x in batch]).to("cuda", non_blocking=True),
