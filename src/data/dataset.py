@@ -69,7 +69,7 @@ class VoxCeleb2(data.Dataset):
         self.snr = snr
         
         self.embedding_path_dict = {
-            "VSRiW": "/feats_VSRiw/",
+            "VSRiW": "/feats_VSRiW/",
             "TalkNet": "/feats_TalkNet/",
             "Loconet": "/feats_Loconet/",
             "AVHuBERT": "/feats_AVHuBERT/",

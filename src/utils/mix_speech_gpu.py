@@ -97,22 +97,25 @@ def _init_worker(all_wav, noise, music):
 
 
 def process_file(wav_fp):
-    """ Process a single file, skipping already processed files. """
+    """ Process a single file, skipping already processed or missing files. """
     # 输出路径: /wav/ -> /mixed_wav/
     output_path = wav_fp.replace('/wav/', '/mixed_wav/')
     
     if os.path.exists(output_path):
         return
     
-    os.makedirs(os.path.dirname(output_path), exist_ok=True)
-    
-    target_speaker = crop_pad_audio(wav_fp, 16000, 5)
-    target_speaker = librosa.util.normalize(target_speaker)
+    try:
+        os.makedirs(os.path.dirname(output_path), exist_ok=True)
+        
+        target_speaker = crop_pad_audio(wav_fp, 16000, 5)
+        target_speaker = librosa.util.normalize(target_speaker)
 
-    mixed_audio = augment_speech(
-        target_speaker, wav_fp, ALL_WAV_FPS, NOISE_FPS, MUSIC_FPS,
-        config.TRAINING_LOWER_SNR, config.TRAINING_UPPER_SNR)
-    sf.write(output_path, mixed_audio, 16000, format="wav")
+        mixed_audio = augment_speech(
+            target_speaker, wav_fp, ALL_WAV_FPS, NOISE_FPS, MUSIC_FPS,
+            config.TRAINING_LOWER_SNR, config.TRAINING_UPPER_SNR)
+        sf.write(output_path, mixed_audio, 16000, format="wav")
+    except Exception as e:
+        print(f"Warning: Skipping {wav_fp}, error: {e}")
 
 
 def main(speech_list, noise_list_files, music_list_files):
