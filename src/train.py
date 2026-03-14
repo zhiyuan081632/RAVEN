@@ -38,9 +38,9 @@ def train(args, train_from_checkpoint=True):
         embedding_size=args.embedding_size,
         batch_size=args.batch_size,
         num_workers=args.num_workers,
-        speech_train_lists=config.SPEECH_TRAIN_LISTS,
-        speech_val_lists=config.SPEECH_VAL_LISTS,
-        speech_test_lists=config.SPEECH_TEST_LISTS,
+        speech_train_lists=args.speech_train_lists,
+        speech_val_lists=args.speech_val_lists,
+        speech_test_lists=args.speech_test_lists,
         noise_lists=config.NOISE_LISTS,
         music_lists=config.MUSIC_LISTS,
     )
@@ -122,9 +122,35 @@ if __name__ == "__main__":
                         help="Maximum number of training epochs")
     parser.add_argument("--train_from_checkpoint", action="store_true",
                     help="If set, training resumes from --ckpt_path. Otherwise, trains from scratch.")
+    
+    # Data list overrides (comma-separated paths)
+    parser.add_argument("--speech_train", type=str, default=None,
+                        help="Override speech train lists (comma-separated paths)")
+    parser.add_argument("--speech_val", type=str, default=None,
+                        help="Override speech val lists (comma-separated paths)")
+    parser.add_argument("--speech_test", type=str, default=None,
+                        help="Override speech test lists (comma-separated paths)")
 
 
     args = parser.parse_args()
+    
+    # Parse data list overrides
+    def _parse_list(arg_val, default):
+        if arg_val:
+            paths = [p.strip() for p in arg_val.split(",") if p.strip()]
+            # Resolve relative paths
+            resolved = []
+            for p in paths:
+                if not os.path.isabs(p):
+                    p = os.path.join(os.path.dirname(__file__), p)
+                resolved.append(p)
+            return resolved
+        return default
+    
+    args.speech_train_lists = _parse_list(args.speech_train, config.SPEECH_TRAIN_LISTS)
+    args.speech_val_lists = _parse_list(args.speech_val, config.SPEECH_VAL_LISTS)
+    args.speech_test_lists = _parse_list(args.speech_test, config.SPEECH_TEST_LISTS)
+    
     args.version_name = f"{args.visual_encoder}_5layer"
     print("num workers: ", args.num_workers)
     

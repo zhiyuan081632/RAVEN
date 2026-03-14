@@ -33,15 +33,15 @@ SPEECH_TEST_LISTS = [
 # 噪声 list（按 split 分组）
 import glob as _glob
 NOISE_LISTS = {
-    "train": sorted(_glob.glob(os.path.join(_DATA_DIR, "musan_noise_train.txt"))),
-    "val":   sorted(_glob.glob(os.path.join(_DATA_DIR, "musan_noise_val.txt"))),
-    "test":  sorted(_glob.glob(os.path.join(_DATA_DIR, "musan_noise_test.txt"))),
+    "train": sorted(_glob.glob(os.path.join(_DATA_DIR, "musan_noise_train*.txt"))),
+    "val":   sorted(_glob.glob(os.path.join(_DATA_DIR, "musan_noise_va*.txt"))),
+    "test":  sorted(_glob.glob(os.path.join(_DATA_DIR, "musan_noise_tes*.txt"))),
 }
 # 音乐 list（按 split 分组）
 MUSIC_LISTS = {
-    "train": sorted(_glob.glob(os.path.join(_DATA_DIR, "musan_music_train.txt"))),
-    "val":   sorted(_glob.glob(os.path.join(_DATA_DIR, "musan_music_val.txt"))),
-    "test":  sorted(_glob.glob(os.path.join(_DATA_DIR, "musan_music_test.txt"))),
+    "train": sorted(_glob.glob(os.path.join(_DATA_DIR, "musan_music_trai*.txt"))),
+    "val":   sorted(_glob.glob(os.path.join(_DATA_DIR, "musan_music_va*.txt"))),
+    "test":  sorted(_glob.glob(os.path.join(_DATA_DIR, "musan_music_tes*.txt"))),
 }
 
 ##############################################################
