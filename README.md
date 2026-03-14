@@ -72,7 +72,7 @@ To resume training from a saved checkpoint, add the --train_from_checkpoint flag
 python -W ignore train.py --train_from_checkpoint --ckpt_path=checkpoints/epoch-last.ckpt
 ```
 
-You also can use different config when running multi-task.
+You also set input datasets and visual_encoder when running multi-task.
 ```
 # 任务1: 只用 VoxCeleb2 训练
 python train.py --speech_train data/VoxCeleb2_train_1000.txt \
@@ -86,6 +86,8 @@ python train.py --speech_train data/GRID_train_1000.txt \
 python train.py --speech_train data/VoxCeleb2_train_1000.txt,data/GRID_train_1000.txt \
                 --visual_encoder VSRiW_TalkNet_concatenate
 
+python train.py --speech_train data/VoxCeleb2_train_1000.txt \
+                --visual_encoder VSRiW
 # 不指定则使用 config.py 默认值
 python train.py
 ```

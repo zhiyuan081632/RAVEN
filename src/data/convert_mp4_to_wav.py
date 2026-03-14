@@ -30,10 +30,10 @@ import sys
 import argparse
 import subprocess
 import time
-import tempfile
+import json
 import wave
 from pathlib import Path
-from multiprocessing import Pool, Manager
+from multiprocessing import Pool
 import numpy as np
 
 
@@ -52,26 +52,27 @@ def get_video_duration(video_path: Path) -> float:
         return None
 
 
-def get_audio_first_pts(video_path: Path) -> float:
+def _get_skip_samples(src_mp4):
     """
-    Get the PTS of the FIRST audio packet using ffprobe.
-    This detects AAC priming samples (negative PTS).
+    Get AAC encoder skip_samples from the first audio packet's side data.
     
     Returns:
-        First packet PTS in seconds, or 0.0 if failed
+        skip_samples count at the original sample rate, or 0 if not found.
     """
     try:
         result = subprocess.run([
             'ffprobe', '-v', 'error', '-select_streams', 'a:0',
             '-show_packets', '-read_intervals', '%+#1',
-            str(video_path)
+            '-of', 'json', str(src_mp4)
         ], capture_output=True, text=True, check=True)
-        for line in result.stdout.split('\n'):
-            if 'pts_time=' in line:
-                return float(line.split('=')[1])
-        return 0.0
+        data = json.loads(result.stdout)
+        for pkt in data.get('packets', []):
+            for sd in pkt.get('side_data_list', []):
+                if sd.get('side_data_type') == 'Skip Samples':
+                    return int(sd.get('skip_samples', 0))
+        return 0
     except Exception:
-        return 0.0
+        return 0
 
 
 def read_wav_data(wav_path: Path):
@@ -107,10 +108,11 @@ def write_wav_data(wav_path: Path, data: np.ndarray, sample_rate: int):
 def extract_audio_with_alignment(src_mp4: Path, dst_audio: Path, sample_rate: int = 16000, 
                                   output_format: str = 'wav') -> bool:
     """
-    Extract audio from src_mp4 to dst_audio.
+    Extract audio from src_mp4 to dst_audio with precise alignment.
     
-    Simple extraction without priming sample handling.
-    This ensures audio-video sync is maintained from original MP4.
+    1. ffmpeg's edit-list handling removes AAC priming samples automatically.
+    2. After extraction, trim/pad the WAV to exactly match video duration
+       (removes AAC frame-boundary padding at the end).
     
     Args:
         src_mp4: Source MP4 video file
@@ -123,10 +125,9 @@ def extract_audio_with_alignment(src_mp4: Path, dst_audio: Path, sample_rate: in
     """
     try:
         dst_audio.parent.mkdir(parents=True, exist_ok=True)
+        video_dur = get_video_duration(src_mp4)
         
-        # Direct extraction and conversion based on output format
         if output_format.lower() == 'wav':
-            # Extract to WAV (PCM)
             cmd = [
                 'ffmpeg', '-y', '-i', str(src_mp4),
                 '-vn', '-acodec', 'pcm_s16le',
@@ -134,7 +135,6 @@ def extract_audio_with_alignment(src_mp4: Path, dst_audio: Path, sample_rate: in
                 str(dst_audio)
             ]
         else:
-            # Extract to M4A (AAC)
             cmd = [
                 'ffmpeg', '-y', '-i', str(src_mp4),
                 '-vn', '-acodec', 'aac',
@@ -144,6 +144,18 @@ def extract_audio_with_alignment(src_mp4: Path, dst_audio: Path, sample_rate: in
             ]
         
         subprocess.run(cmd, capture_output=True, check=True)
+        
+        # Trim/pad WAV to exact video duration (remove AAC frame padding)
+        if output_format.lower() == 'wav' and video_dur is not None and video_dur > 0:
+            target_samples = int(round(video_dur * sample_rate))
+            data, sr = read_wav_data(dst_audio)
+            if len(data) != target_samples:
+                if len(data) > target_samples:
+                    data = data[:target_samples]
+                else:
+                    data = np.pad(data, (0, target_samples - len(data)))
+                write_wav_data(dst_audio, data, sr)
+        
         return True
         
     except subprocess.CalledProcessError:
@@ -156,7 +168,6 @@ def _extract_audio_simple(src_mp4: Path, dst_audio: Path, sample_rate: int = 160
                           output_format: str = 'wav') -> bool:
     """
     Simple audio extraction fallback (no priming sample handling).
-    Used when video duration cannot be determined.
     """
     if output_format.lower() == 'wav':
         cmd = [
@@ -180,7 +191,7 @@ def process_single(args_tuple):
     """
     Single-file processing wrapper for multiprocessing Pool.
     """
-    src_mp4, dst_audio, sample_rate, output_format, counter, lock, total = args_tuple
+    src_mp4, dst_audio, sample_rate, output_format = args_tuple
 
     # Skip if already exists
     if dst_audio.exists():
@@ -190,18 +201,10 @@ def process_single(args_tuple):
         ok = extract_audio_with_alignment(src_mp4, dst_audio, sample_rate, output_format)
         status = "created" if ok else "failed"
     
-    # Thread-safe progress update
-    with lock:
-        counter.value += 1
-        if counter.value % 100 == 0 or counter.value == total:
-            progress_pct = (counter.value / total) * 100
-            print(f"[{counter.value}/{total}] {progress_pct:.1f}%")
-    
     return src_mp4, ok, status
 
 
-def build_task_list(input_root: Path, output_root: Path, sample_rate: int, output_format: str,
-                    counter, lock, total):
+def build_task_list(input_root: Path, output_root: Path, sample_rate: int, output_format: str):
     """
     Build (src_mp4, dst_audio) pairs for all mp4 files under input_root.
     """
@@ -216,14 +219,13 @@ def build_task_list(input_root: Path, output_root: Path, sample_rate: int, outpu
         if dst_audio.exists():
             skipped += 1
             continue
-        tasks.append((src_mp4, dst_audio, sample_rate, output_format, counter, lock, total))
+        tasks.append((src_mp4, dst_audio, sample_rate, output_format))
     if skipped > 0:
         print(f"Skipped {skipped} already converted files")
     return tasks
 
 
-def build_task_list_from_filelist(file_list_paths, sample_rate: int, output_format: str,
-                                  counter, lock, total):
+def build_task_list_from_filelist(file_list_paths, sample_rate: int, output_format: str):
     """
     从 list 文件构建任务，每行一个 mp4 绝对路径。
     输出路径: /mp4/ -> /wav/ (or /m4a/), .mp4 -> .wav (or .m4a)
@@ -249,7 +251,7 @@ def build_task_list_from_filelist(file_list_paths, sample_rate: int, output_form
                 if dst_audio.exists():
                     skipped += 1
                     continue
-                tasks.append((src_mp4, dst_audio, sample_rate, output_format, counter, lock, total))
+                tasks.append((src_mp4, dst_audio, sample_rate, output_format))
     if skipped > 0:
         print(f"Skipped {skipped} already converted files")
     return tasks
@@ -305,11 +307,8 @@ def main():
             print("No MP4 files found in list files.")
             return
         
-        manager = Manager()
-        counter = manager.Value('i', 0)
-        lock = manager.Lock()
         tasks = build_task_list_from_filelist(
-            args.file_lists, args.sample_rate, args.output_format, counter, lock, total)
+            args.file_lists, args.sample_rate, args.output_format)
     else:
         input_root = Path(args.input_dir)
         output_root = Path(args.output_dir)
@@ -330,11 +329,8 @@ def main():
             print("No MP4 files found.")
             return
         
-        manager = Manager()
-        counter = manager.Value('i', 0)
-        lock = manager.Lock()
         tasks = build_task_list(
-            input_root, output_root, args.sample_rate, args.output_format, counter, lock, total)
+            input_root, output_root, args.sample_rate, args.output_format)
 
     print(f"Tasks to process: {len(tasks)}")
     if len(tasks) == 0:
@@ -346,15 +342,16 @@ def main():
     
     failed_files = []
     
-    # Multiprocessing without tqdm (custom progress)
+    # Multiprocessing — progress printed in main process
+    done = 0
+    task_total = len(tasks)
     with Pool(processes=args.jobs) as pool:
-        results = pool.imap_unordered(process_single, tasks)
-        for src_mp4, ok, status in results:
+        for src_mp4, ok, status in pool.imap_unordered(process_single, tasks):
+            done += 1
             if not ok and status == "failed":
                 failed_files.append(str(src_mp4))
-    
-    # Clean newline after progress
-    print()
+            if done % 100 == 0 or done == task_total:
+                print(f"[{done}/{task_total}] {done/task_total*100:.1f}%")
     
     elapsed = time.time() - start_time
     print(f"\nCompleted in {elapsed:.1f}s ({total/elapsed:.1f} files/s)")
